@@ -91,7 +91,7 @@ git pull
 git diff
 
 # 撤销工作区的修改
-git checkout -- filename
+git restore filename
 
 # 查看分支
 git branch
