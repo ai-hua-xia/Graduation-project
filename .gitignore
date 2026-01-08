@@ -6,3 +6,4 @@ checkpoints_*/
 *.npy
 *.vscode/
 __pycache__/*.pyc
+dataset_style/

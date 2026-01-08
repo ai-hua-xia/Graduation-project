@@ -72,3 +72,40 @@ bishe/
 ## 说明
 - 生成视频的动作序列来自真实采集，不是随机动作。
 - `tokens_actions_vqvae_16x16.npz` 通过 `indices` 做对齐，避免缺帧导致动作错位。
+
+1) 增加实验与指标（最快体现贡献）
+
+  - 加 2–3 个对比：
+      - 无动作条件 vs 有动作条件
+      - VAE vs VQ‑VAE
+      - 无 Adapter vs 有 Adapter
+  - 增加定量指标：
+      - 重建：PSNR/SSIM/LPIPS
+      - 预测：token CE、1‑step vs 5‑step 误差
+      - 语义 Adapter（如果做）：mIoU
+  - 这部分能写进论文“实验/消融”，非常有分量。
+
+  2) 多步 rollout 训练（让世界模型更“像世界模型”）
+
+  - 现在是 1‑step teacher forcing。
+  - 可以加K‑step rollout loss 或 scheduled sampling，强化长时稳定性。
+  - 结果会明显减少“场景跳变”。
+
+  3) Adapter 强化（让你更像“有创新点”）
+
+  - 做两个 Adapter：
+      - 语义 Adapter（MetaDrive 语义相机监督）
+      - 风格 Adapter（夜晚/雾）
+  - 答辩展示时：切换按钮 + 视觉对比，效果很“学术”。
+
+  4) 训练/推理可视化与系统化
+
+  - 自动保存 rollout 对比图、loss 曲线、FPS 统计
+  - 输出日志表格（简化论文写作）
+  - 这能体现“工程和实验完整性”
+
+  5) 模型结构小升级（代码量更多）
+
+  - 换成 分层 Transformer（先时间后空间）
+  - 或加入 Action‑FiLM / Action‑CrossAttention
+  - 这能写成“结构改进贡献点”
