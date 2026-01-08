@@ -22,8 +22,8 @@ DATA_PATH = "dataset_v2_complex/tokens_actions_vqvae_16x16.npz"
 # 3. 生成参数
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 STEPS_TO_DREAM = 100    # 想要让它想象多少帧 (比如 100 帧)
-TEMPERATURE = 0.4       # 0.8: 保守/稳定; 1.0: 正常; 1.2: 更有创造力但也更可能崩坏
-TOP_K = 5             # 只从概率最高的 100 个 token 里采样，防止画面出现乱码
+TEMPERATURE = 0.3       # 0.8: 保守/稳定; 1.0: 正常; 1.2: 更有创造力但也更可能崩坏
+TOP_K = 10             # 只从概率最高的 100 个 token 里采样，防止画面出现乱码
 
 OUTPUT_VIDEO = "dream_result.mp4"
 # =======================================
