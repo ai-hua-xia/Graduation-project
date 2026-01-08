@@ -1,0 +1,7 @@
+dataset_v2_complex/
+checkpoints_*/
+*.mp4
+*.avi
+*.npz
+*.npy
+*.vscode/
