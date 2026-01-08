@@ -5,5 +5,5 @@ checkpoints_*/
 *.npz
 *.npy
 *.vscode/
-__pycache__/*.pyc
+*.pyc
 dataset_style/

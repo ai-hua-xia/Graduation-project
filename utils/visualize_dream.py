@@ -1,20 +1,33 @@
+import os
+import sys
+import time
+
+import cv2
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
-import cv2
-import os
-import time
+
+# 允许从子目录直接运行
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 # 导入你的模型定义
 # 如果报错说找不到模块，请确保文件名一致
-from train_vqvae_256 import VQVAE, IMAGE_SIZE
-from train_world_model import WorldModelGPT, VOCAB_SIZE, TOKENS_PER_FRAME, BLOCK_SIZE
+from train.train_vqvae_256 import VQVAE, IMAGE_SIZE, EMBED_DIM
+from train.train_adapter import LatentAdapter
+from train.train_world_model import WorldModelGPT, VOCAB_SIZE, TOKENS_PER_FRAME, BLOCK_SIZE
 
 # ================= 配置 =================
 # 1. 模型路径
 VQVAE_PATH = "checkpoints_vqvae_256/vqvae_256_ep99.pth"
 # 这里选一个你刚刚训练出来的最新权重，比如 ep15, ep20 等
 WORLD_MODEL_PATH = "checkpoints_world_model/world_model_ep99.pth" # 👈 修改为你现在的最新模型
+# 风格解码器权重（优先级高于 Adapter；留空则使用原始 VQ-VAE 解码）
+STYLE_DECODER_PATH = "checkpoints_adapter/snow/decoder/decoder_snow_noise_ep29.pth"
+# 适配器权重（留空则使用原始 VQ-VAE 解码）
+ADAPTER_PATH = "checkpoints_adapter/snow/decoder/decoder_snow_noise_ep29.pth"
+ADAPTER_BOTTLENECK = 64
 
 # 2. 数据路径 (用来提取第一帧作为种子)
 DATA_PATH = "dataset_v2_complex/tokens_actions_vqvae_16x16.npz"
@@ -22,8 +35,8 @@ DATA_PATH = "dataset_v2_complex/tokens_actions_vqvae_16x16.npz"
 # 3. 生成参数
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 STEPS_TO_DREAM = 50    # 想要让它想象多少帧 (比如 100 帧)
-TEMPERATURE = 1       # 0.8: 保守/稳定; 1.0: 正常; 1.2: 更有创造力但也更可能崩坏
-TOP_K = 1             # 只从概率最高的 100 个 token 里采样，防止画面出现乱码
+TEMPERATURE = 1.2       # 0.8: 保守/稳定; 1.0: 正常; 1.2: 更有创造力但也更可能崩坏
+TOP_K = 5             # 只从概率最高的 100 个 token 里采样，防止画面出现乱码
 
 OUTPUT_VIDEO = "dream_result.mp4"
 # =======================================
@@ -39,9 +52,22 @@ def load_models():
     checkpoint = torch.load(WORLD_MODEL_PATH, map_location=DEVICE)
     gpt.load_state_dict(checkpoint["model"])
     gpt.eval()
-    return vqvae, gpt
+    adapter = None
+    if STYLE_DECODER_PATH:
+        print(f"⏳ Loading Style Decoder from {STYLE_DECODER_PATH}...")
+        ckpt = torch.load(STYLE_DECODER_PATH, map_location=DEVICE)
+        state = ckpt["decoder"] if isinstance(ckpt, dict) and "decoder" in ckpt else ckpt
+        vqvae.decoder.load_state_dict(state, strict=True)
+    elif ADAPTER_PATH:
+        print(f"⏳ Loading Adapter from {ADAPTER_PATH}...")
+        adapter = LatentAdapter(EMBED_DIM, bottleneck=ADAPTER_BOTTLENECK).to(DEVICE)
+        ckpt = torch.load(ADAPTER_PATH, map_location=DEVICE)
+        state = ckpt["adapter"] if isinstance(ckpt, dict) and "adapter" in ckpt else ckpt
+        adapter.load_state_dict(state, strict=True)
+        adapter.eval()
+    return vqvae, gpt, adapter
 
-def decode_indices(vqvae, indices):
+def decode_indices(vqvae, indices, adapter=None):
     """把 (16, 16) 的 token 矩阵还原成图片"""
     with torch.no_grad():
         # indices shape: (16, 16) -> (1, 16, 16)
@@ -54,7 +80,9 @@ def decode_indices(vqvae, indices):
         z_q = vqvae.quantizer.embedding(indices_tensor) # (1, 16, 16, 64)
         z_q = z_q.permute(0, 3, 1, 2) # (1, 64, 16, 16)
         
-        # 2. 解码
+        # 2. 可选 Adapter + 解码
+        if adapter is not None:
+            z_q = adapter(z_q)
         decoded_img = vqvae.decoder(z_q)
         
         # 3. 转回 numpy 图片格式
@@ -74,7 +102,7 @@ def sample_next_token(logits, temperature=1.0, top_k=None):
     return idx
 
 def main():
-    vqvae, gpt = load_models()
+    vqvae, gpt, adapter = load_models()
     
     # 1. 加载真实数据作为“种子”
     print("🌱 Loading Seed Data...")
@@ -100,7 +128,7 @@ def main():
     generated_frames = []
     
     # 先把第一帧解码出来存着
-    first_frame = decode_indices(vqvae, all_tokens[start_idx])
+    first_frame = decode_indices(vqvae, all_tokens[start_idx], adapter=adapter)
     generated_frames.append(cv2.cvtColor(first_frame, cv2.COLOR_RGB2BGR))
     
     print(f"🚀 Dreaming start! Context window: {BLOCK_SIZE} tokens")
@@ -155,7 +183,7 @@ def main():
             
             # 解码显示
             # 注意：decode_indices 需要 numpy 格式
-            img_np = decode_indices(vqvae, new_frame_tokens.reshape(16, 16).cpu().numpy())
+            img_np = decode_indices(vqvae, new_frame_tokens.reshape(16, 16).cpu().numpy(), adapter=adapter)
             generated_frames.append(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
             
             # 更新上下文
