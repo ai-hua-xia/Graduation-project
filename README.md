@@ -97,7 +97,7 @@ git restore filename
 git branch
 
 # 创建并切换到新分支
-git checkout -b new-branch-name
+git switch -c new-branch-name
 ```
 
 ## 注意事项
