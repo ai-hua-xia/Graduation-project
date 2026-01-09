@@ -22,11 +22,11 @@ from train.train_world_model import WorldModelGPT, VOCAB_SIZE, TOKENS_PER_FRAME,
 # 1. 模型路径
 VQVAE_PATH = "checkpoints_vqvae_256/vqvae_256_ep99.pth"
 # 这里选一个你刚刚训练出来的最新权重，比如 ep15, ep20 等
-WORLD_MODEL_PATH = "checkpoints_world_model/world_model_ep99.pth" # 👈 修改为你现在的最新模型
+WORLD_MODEL_PATH = "checkpoints_new_world_model/world_model_ep45.pth" # 👈 修改为你现在的最新模型
 # 风格解码器权重（优先级高于 Adapter；留空则使用原始 VQ-VAE 解码）
 STYLE_DECODER_PATH = ""
 # 适配器权重（留空则使用原始 VQ-VAE 解码）
-ADAPTER_PATH = "checkpoints_adapter/fog/adapter_fog_ep29.pth"
+ADAPTER_PATH = ""
 ADAPTER_BOTTLENECK = 64
 
 # 2. 数据路径 (用来提取第一帧作为种子)
@@ -35,11 +35,211 @@ DATA_PATH = "dataset_v2_complex/tokens_actions_vqvae_16x16.npz"
 # 3. 生成参数
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 STEPS_TO_DREAM = 50    # 想要让它想象多少帧 (比如 100 帧)
-TEMPERATURE = 1.2       # 0.8: 保守/稳定; 1.0: 正常; 1.2: 更有创造力但也更可能崩坏
-TOP_K = 5             # 只从概率最高的 100 个 token 里采样，防止画面出现乱码
+TEMPERATURE = 0.1       # 0.8: 保守/稳定; 1.0: 正常; 1.2: 更有创造力但也更可能崩坏
+TOP_K = 1             # 只从概率最高的 100 个 token 里采样，防止画面出现乱码
 
 OUTPUT_VIDEO = "dream_result.mp4"
+# 4. 键盘控制 (可选)
+USE_KEYBOARD = True
+KEYBOARD_FALLBACK_TO_DATA = False
+KEYBOARD_WAIT_FOR_INPUT = True
+KEYBOARD_BACKEND = "terminal"  # "terminal" or "pygame"
+KEYBOARD_REPEAT_FRAMES = 10
+STEER_SCALE = 1.0
+THROTTLE_SCALE = 1.0
+TARGET_FPS = 0
+OVERLAY_WASD = True
+# 5. 动作文件 (可选，每行一个动作: w/a/s/d/space)
+USE_ACTION_FILE = True
+ACTIONS_FILE_PATH = "action.txt"
 # =======================================
+
+def key_to_action(key: str, steer_scale: float, throttle_scale: float):
+    key = key.strip().lower()
+    if not key:
+        return None, False
+    if key == "q":
+        return None, True
+    if key in (" ", "space", "brake"):
+        return np.array([0.0, 0.0], dtype=np.float32), False
+    steer = 0.0
+    throttle = 0.0
+    if key == "a":
+        steer = -1.0
+    elif key == "d":
+        steer = 1.0
+    elif key == "w":
+        throttle = 1.0
+    elif key == "s":
+        throttle = -1.0
+    else:
+        return None, False
+    action = np.array(
+        [steer * steer_scale, throttle * throttle_scale],
+        dtype=np.float32,
+    )
+    action = np.clip(action, -1.0, 1.0)
+    return action, False
+
+def load_actions_from_file(path: str, steer_scale: float, throttle_scale: float):
+    if not path:
+        return []
+    if not os.path.isabs(path):
+        path = os.path.join(PROJECT_ROOT, path)
+    if not os.path.exists(path):
+        print(f"⚠️ Action file not found: {path}")
+        return []
+    actions = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            token = line.strip()
+            if not token or token.startswith("#"):
+                continue
+            action, quit_signal = key_to_action(token, steer_scale, throttle_scale)
+            if quit_signal:
+                break
+            if action is None:
+                print(f"⚠️ Unknown action token in file: {token!r}")
+                continue
+            actions.append(action)
+    return actions
+
+class KeyboardActionSource:
+    def __init__(self, steer_scale: float, throttle_scale: float):
+        import pygame
+
+        self.pygame = pygame
+        self.steer_scale = steer_scale
+        self.throttle_scale = throttle_scale
+        pygame.init()
+        self.screen = pygame.display.set_mode((280, 120))
+        pygame.display.set_caption("WASD Control (focus this window)")
+
+    def poll(self):
+        pygame = self.pygame
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None, True
+        keys = pygame.key.get_pressed()
+        steer = float(keys[pygame.K_d]) - float(keys[pygame.K_a])
+        throttle = float(keys[pygame.K_w]) - float(keys[pygame.K_s])
+        if steer == 0.0 and throttle == 0.0:
+            return None, False
+        action = np.array(
+            [steer * self.steer_scale, throttle * self.throttle_scale],
+            dtype=np.float32,
+        )
+        action = np.clip(action, -1.0, 1.0)
+        return action, False
+
+    def wait_for_action(self):
+        while True:
+            action, quit_signal = self.poll()
+            if quit_signal:
+                return None, True
+            if action is not None:
+                return action, False
+            time.sleep(0.01)
+
+    def close(self):
+        self.pygame.quit()
+
+
+class TerminalActionSource:
+    def __init__(self, steer_scale: float, throttle_scale: float):
+        import termios
+        import sys
+
+        if not sys.stdin.isatty():
+            raise RuntimeError("stdin is not a TTY")
+        self.termios = termios
+        self.fd = sys.stdin.fileno()
+        self.old_settings = termios.tcgetattr(self.fd)
+        new_settings = termios.tcgetattr(self.fd)
+        new_settings[3] &= ~(termios.ECHO | termios.ICANON)
+        termios.tcsetattr(self.fd, termios.TCSADRAIN, new_settings)
+        self.steer_scale = steer_scale
+        self.throttle_scale = throttle_scale
+
+    def _key_to_action(self, key: str):
+        return key_to_action(key, self.steer_scale, self.throttle_scale)
+
+    def poll(self):
+        import select
+        import sys
+
+        rlist, _, _ = select.select([sys.stdin], [], [], 0)
+        if not rlist:
+            return None, False
+        key = sys.stdin.read(1)
+        return self._key_to_action(key)
+
+    def wait_for_action(self):
+        import select
+        import sys
+
+        while True:
+            rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+            if not rlist:
+                continue
+            key = sys.stdin.read(1)
+            action, quit_signal = self._key_to_action(key)
+            if quit_signal:
+                return None, True
+            if action is not None:
+                return action, False
+
+    def close(self):
+        self.termios.tcsetattr(self.fd, self.termios.TCSADRAIN, self.old_settings)
+
+
+def draw_wasd_overlay(frame_bgr: np.ndarray, action: np.ndarray | None, active: bool) -> None:
+    if frame_bgr is None:
+        return
+    h, w = frame_bgr.shape[:2]
+    size = max(22, int(h * 0.08))
+    gap = int(size * 0.25)
+    x0 = 12
+    y0 = h - (size * 2 + gap) - 12
+    if y0 < 8:
+        y0 = 8
+
+    def draw_key(label: str, x: int, y: int, is_on: bool) -> None:
+        if is_on:
+            fill = (0, 220, 255)
+            text = (10, 24, 26)
+        else:
+            fill = (40, 40, 40)
+            text = (210, 210, 210)
+        border = (200, 200, 200)
+        cv2.rectangle(frame_bgr, (x, y), (x + size, y + size), fill, -1)
+        cv2.rectangle(frame_bgr, (x, y), (x + size, y + size), border, 1)
+        cv2.putText(
+            frame_bgr,
+            label,
+            (x + int(size * 0.32), y + int(size * 0.68)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            text,
+            1,
+            cv2.LINE_AA,
+        )
+
+    steer = 0.0
+    throttle = 0.0
+    if active and action is not None:
+        steer = float(action[0])
+        throttle = float(action[1])
+
+    key_w = throttle > 0.1
+    key_s = throttle < -0.1
+    key_a = steer < -0.1
+    key_d = steer > 0.1
+
+    draw_key("W", x0 + size + gap, y0, key_w)
+    draw_key("A", x0, y0 + size + gap, key_a)
+    draw_key("S", x0 + size + gap, y0 + size + gap, key_s)
+    draw_key("D", x0 + (size + gap) * 2, y0 + size + gap, key_d)
 
 def load_models():
     print("⏳ Loading VQ-VAE...")
@@ -119,10 +319,28 @@ def main():
     # ===================================================
     
     context_tokens = context_tokens.unsqueeze(0) # (1, 1, 256) -> batch=1, seq=1, dim=256
-    
-    # 提取未来 100 帧的真实动作
-    future_actions = torch.from_numpy(all_actions[start_idx:start_idx + STEPS_TO_DREAM]).float().to(DEVICE)
-    future_actions = future_actions.unsqueeze(0) # (1, STEPS, 2)
+
+    keyboard = None
+    if USE_KEYBOARD:
+        try:
+            if KEYBOARD_BACKEND == "pygame":
+                keyboard = KeyboardActionSource(STEER_SCALE, THROTTLE_SCALE)
+                print("🕹️ Keyboard control enabled (WASD). Focus the small window.")
+            else:
+                keyboard = TerminalActionSource(STEER_SCALE, THROTTLE_SCALE)
+                print("⌨️ Terminal control enabled: WASD, Space=brake, Q=quit")
+        except Exception as e:
+            print(f"⚠️ Keyboard init failed: {e}. Fallback to dataset actions.")
+            keyboard = None
+
+    # 预加载自动动作（用于回退）
+    auto_actions = torch.from_numpy(all_actions[start_idx:start_idx + STEPS_TO_DREAM]).float().to(DEVICE)
+    auto_actions = auto_actions.unsqueeze(0) # (1, STEPS, 2)
+    file_actions = []
+    if USE_ACTION_FILE:
+        file_actions = load_actions_from_file(ACTIONS_FILE_PATH, STEER_SCALE, THROTTLE_SCALE)
+        if file_actions:
+            print(f"📄 Loaded {len(file_actions)} actions from {ACTIONS_FILE_PATH}")
     
     # 用于保存生成的图片
     generated_frames = []
@@ -133,9 +351,18 @@ def main():
     
     print(f"🚀 Dreaming start! Context window: {BLOCK_SIZE} tokens")
     
+    stop_dream = False
+    manual_repeat = 0
+    manual_action_np = None
+    manual_action_tensor = None
+    file_repeat = 0
+    file_action_np = None
+    file_action_tensor = None
+    file_action_idx = 0
+    manual_active = False
     with torch.no_grad():
         current_tokens = context_tokens # (1, seq_len, 256)
-        current_actions = future_actions[:, 0:1, :] # 取第一个动作 (1, 1, 2)
+        current_actions = auto_actions[:, 0:1, :] # 取第一个动作 (1, 1, 2)
         
         for step in range(STEPS_TO_DREAM - 1):
             t0 = time.time()
@@ -144,7 +371,47 @@ def main():
             next_frame_tokens = []
             
             # 获取当前上下文的动作
-            this_step_action = future_actions[:, step:step+1, :] # (1, 1, 2)
+            auto_step_action = auto_actions[:, step:step+1, :] # (1, 1, 2)
+            this_step_action = auto_step_action
+            manual_active = False
+            if file_actions:
+                if file_repeat > 0 and file_action_tensor is not None:
+                    this_step_action = file_action_tensor
+                    manual_action_np = file_action_np
+                    manual_active = True
+                    file_repeat -= 1
+                elif file_action_idx < len(file_actions):
+                    file_action_np = file_actions[file_action_idx]
+                    file_action_tensor = torch.from_numpy(file_action_np).view(1, 1, 2).to(DEVICE)
+                    this_step_action = file_action_tensor
+                    manual_action_np = file_action_np
+                    manual_active = True
+                    file_repeat = max(KEYBOARD_REPEAT_FRAMES - 1, 0)
+                    file_action_idx += 1
+                elif not KEYBOARD_FALLBACK_TO_DATA:
+                    this_step_action = torch.zeros_like(auto_step_action)
+            elif keyboard is not None:
+                if manual_repeat > 0 and manual_action_tensor is not None:
+                    this_step_action = manual_action_tensor
+                    manual_active = True
+                    manual_repeat -= 1
+                else:
+                    if KEYBOARD_WAIT_FOR_INPUT:
+                        manual_action, quit_signal = keyboard.wait_for_action()
+                    else:
+                        manual_action, quit_signal = keyboard.poll()
+                    if quit_signal:
+                        print("⛔ Keyboard input closed, stop dreaming.")
+                        stop_dream = True
+                        break
+                    if manual_action is not None:
+                        manual_action_np = manual_action
+                        manual_action_tensor = torch.from_numpy(manual_action).view(1, 1, 2).to(DEVICE)
+                        this_step_action = manual_action_tensor
+                        manual_active = True
+                        manual_repeat = max(KEYBOARD_REPEAT_FRAMES - 1, 0)
+                    elif not KEYBOARD_FALLBACK_TO_DATA:
+                        this_step_action = torch.zeros_like(auto_step_action)
             
             # 这里的滑动窗口逻辑
             MAX_CONTEXT_FRAMES = 3
@@ -164,7 +431,7 @@ def main():
                 logits, _ = gpt(full_input_tokens, full_input_actions)
                 
                 seq_len = current_tokens.shape[1] 
-                target_idx = seq_len * 257 + i - 1
+                target_idx = seq_len * TOKENS_PER_FRAME + i - 1
                 
                 # 安全检查
                 if target_idx >= logits.shape[1]:
@@ -184,13 +451,27 @@ def main():
             # 解码显示
             # 注意：decode_indices 需要 numpy 格式
             img_np = decode_indices(vqvae, new_frame_tokens.reshape(16, 16).cpu().numpy(), adapter=adapter)
-            generated_frames.append(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
+            frame_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            if OVERLAY_WASD:
+                draw_wasd_overlay(frame_bgr, manual_action_np, manual_active)
+            generated_frames.append(frame_bgr)
             
             # 更新上下文
             current_tokens = torch.cat([current_tokens, new_frame_tokens], dim=1)
             current_actions = torch.cat([current_actions, this_step_action], dim=1)
             
-            print(f"Frame {step+1}/{STEPS_TO_DREAM} generated. Time: {time.time()-t0:.2f}s")
+            frame_time = time.time() - t0
+            if TARGET_FPS and TARGET_FPS > 0:
+                sleep_time = max(0.0, 1.0 / TARGET_FPS - frame_time)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+            print(f"Frame {step+1}/{STEPS_TO_DREAM} generated. Time: {frame_time:.2f}s")
+
+            if stop_dream:
+                break
+
+    if keyboard is not None:
+        keyboard.close()
 
     # 保存视频
     print("💾 Saving video (step 1: raw export)...")

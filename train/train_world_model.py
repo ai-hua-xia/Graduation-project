@@ -9,7 +9,7 @@ import time
 
 # ================= 配置区域 =================
 DATA_PATH = "dataset_v2_complex/tokens_actions_vqvae_16x16.npz"
-OUT_DIR = "checkpoints_world_model"
+OUT_DIR = "checkpoints_new_world_model"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # 模型参数
@@ -19,14 +19,19 @@ N_EMBD = 512            # 嵌入维度 (GPT的隐藏层大小)
 N_HEAD = 8              # 注意力头数
 N_LAYER = 8             # Transformer 层数
 DROPOUT = 0.1
+USE_ACTION_FILM = True   # 动作 FiLM 调制 (更强的条件注入)
 
 # 序列参数
 TOKENS_PER_FRAME = 256  # 16x16
-BLOCK_SIZE = 257 * 4    # 上下文长度：看过去 4 帧 (256图 + 1动作) * 4
+CONTEXT_FRAMES = 4      # 上下文帧数
+BLOCK_SIZE = TOKENS_PER_FRAME * CONTEXT_FRAMES
 BATCH_SIZE = 16         # 显存不够就改小，比如 8 或 4
 LEARNING_RATE = 3e-4
 MAX_EPOCHS = 100
 SAVE_EVERY = 5          # 每多少轮保存一次
+TEMPORAL_SMOOTH_WEIGHT = 0.08  # 时间一致性正则权重 (0 关闭)
+TEMPORAL_SMOOTH_USE_ACTION = True
+TEMPORAL_SMOOTH_ACTION_BETA = 2.0  # 动作越大，平滑约束越弱
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -44,7 +49,6 @@ class WorldModelDataset(Dataset):
         self.tokens_flat = self.tokens.reshape(self.n_samples, -1).astype(np.int64)
         
         self.seq_len = seq_len # 一次拿几帧训练
-        self.frame_struct_len = TOKENS_PER_FRAME + 1 # 一帧的总长度 (256图 + 1动作)
 
         # 预计算所有有效的起始索引（防止跨视频采样）
         self.valid_starts = []
@@ -107,11 +111,46 @@ class CausalSelfAttention(nn.Module):
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         return self.resid_dropout(self.c_proj(y))
 
+class CrossAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        assert N_EMBD % N_HEAD == 0
+        self.q_proj = nn.Linear(N_EMBD, N_EMBD)
+        self.kv_proj = nn.Linear(N_EMBD, 2 * N_EMBD)
+        self.c_proj = nn.Linear(N_EMBD, N_EMBD)
+        self.attn_dropout = nn.Dropout(DROPOUT)
+        self.resid_dropout = nn.Dropout(DROPOUT)
+        self.n_head = N_HEAD
+        self.n_embd = N_EMBD
+
+    def forward(self, x, context):
+        B, T, C = x.size()
+        Bc, S, Cc = context.size()
+        if Bc != B or Cc != C:
+            raise ValueError("Action context shape mismatch.")
+
+        q = self.q_proj(x)
+        k, v = self.kv_proj(context).split(self.n_embd, dim=2)
+
+        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+        k = k.view(B, S, self.n_head, C // self.n_head).transpose(1, 2)
+        v = v.view(B, S, self.n_head, C // self.n_head).transpose(1, 2)
+
+        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        att = F.softmax(att, dim=-1)
+        att = self.attn_dropout(att)
+        y = att @ v
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
+        return self.resid_dropout(self.c_proj(y))
+
 class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.ln1 = nn.LayerNorm(N_EMBD)
         self.attn = CausalSelfAttention(config)
+        self.action_film = nn.Linear(N_EMBD, 2 * N_EMBD) if USE_ACTION_FILM else None
+        self.ln_cross = nn.LayerNorm(N_EMBD)
+        self.cross_attn = CrossAttention(config)
         self.ln2 = nn.LayerNorm(N_EMBD)
         self.mlp = nn.Sequential(
             nn.Linear(N_EMBD, 4 * N_EMBD),
@@ -120,8 +159,14 @@ class Block(nn.Module):
             nn.Dropout(DROPOUT),
         )
 
-    def forward(self, x):
-        x = x + self.attn(self.ln1(x))
+    def forward(self, x, action_context, action_token_context=None):
+        x_norm = self.ln1(x)
+        if self.action_film is not None and action_token_context is not None:
+            gamma, beta = self.action_film(action_token_context).chunk(2, dim=-1)
+            x_norm = x_norm * (1 + gamma) + beta
+        x = x + self.attn(x_norm)
+        if action_context is not None:
+            x = x + self.cross_attn(self.ln_cross(x), action_context)
         x = x + self.mlp(self.ln2(x))
         return x
 
@@ -131,10 +176,11 @@ class WorldModelGPT(nn.Module):
         # 1. 嵌入层
         self.token_embedding = nn.Embedding(VOCAB_SIZE, N_EMBD)
         self.action_embedding = nn.Linear(ACTION_DIM, N_EMBD) # 连续动作映射到 embedding 空间
+        self.action_pos_embedding = nn.Embedding(CONTEXT_FRAMES, N_EMBD)
         self.position_embedding = nn.Embedding(BLOCK_SIZE, N_EMBD)
         
         # 2. Transformer Blocks
-        self.blocks = nn.Sequential(*[Block(None) for _ in range(N_LAYER)])
+        self.blocks = nn.ModuleList([Block(None) for _ in range(N_LAYER)])
         self.ln_f = nn.LayerNorm(N_EMBD)
         
         # 3. 输出头 (预测下一个 Token)
@@ -159,83 +205,52 @@ class WorldModelGPT(nn.Module):
         action_seq: (B, seq_len, 2)
         """
         B, seq_len, _ = token_seq.shape
-        
-        # --- 核心逻辑：构造输入序列 ---
-        # 每一帧变成了 257 个 token: [256个图token, 1个动作embedding]
-        # 总长度 T = seq_len * 257
-        
-        # 1. 把 Image Tokens 变成 Embedding
-        img_embs = self.token_embedding(token_seq) # (B, seq_len, 256, N_EMBD)
-        
-        # 2. 把 Action 变成 Embedding
-        act_embs = self.action_embedding(action_seq) # (B, seq_len, N_EMBD)
-        act_embs = act_embs.unsqueeze(2) # (B, seq_len, 1, N_EMBD)
-        
-        # 3. 拼接: 在每帧的 256 个图 token 后面拼 1 个动作 token
-        # 形状变: (B, seq_len, 257, N_EMBD)
-        x = torch.cat([img_embs, act_embs], dim=2) 
-        
-        # 4. 展平为时间序列
-        # 形状变: (B, seq_len * 257, N_EMBD) -> (B, T, N_EMBD)
-        x = x.view(B, -1, N_EMBD)
-        
-        # 5. 加上位置编码
-        T = x.size(1)
+
+        # 1. Image tokens -> embeddings
+        flat_tokens = token_seq.view(B, -1)  # (B, seq_len * 256)
+        tok_embs = self.token_embedding(flat_tokens)  # (B, T, N_EMBD)
+
+        # 2. Action embeddings + positional encoding (per frame)
+        if seq_len > self.action_pos_embedding.num_embeddings:
+            raise ValueError("seq_len exceeds action position embedding size.")
+        frame_ids = torch.arange(seq_len, device=tok_embs.device)
+        act_embs = self.action_embedding(action_seq) + self.action_pos_embedding(frame_ids)[None, :, :]
+
+        # 3. Broadcast action embeddings to tokens
+        T = tok_embs.size(1)
+        token_frame_ids = torch.arange(T, device=tok_embs.device) // TOKENS_PER_FRAME
+        token_frame_ids = torch.clamp(token_frame_ids, max=seq_len - 1)
+        act_tok_embs = act_embs[:, token_frame_ids, :]  # (B, T, N_EMBD)
+
+        # 4. Position embedding
         if T > BLOCK_SIZE:
-             # 如果序列太长（比如第一次运行），截断（虽然理论上不会发生）
-             x = x[:, :BLOCK_SIZE, :]
-             T = BLOCK_SIZE
-             
-        pos_idxs = torch.arange(T, device=x.device)
+            tok_embs = tok_embs[:, :BLOCK_SIZE, :]
+            act_tok_embs = act_tok_embs[:, :BLOCK_SIZE, :]
+            T = BLOCK_SIZE
+        pos_idxs = torch.arange(T, device=tok_embs.device)
         pos_emb = self.position_embedding(pos_idxs)
-        x = x + pos_emb
-        
-        # 6. Transformer Forward
-        x = self.blocks(x)
+
+        x = tok_embs + act_tok_embs + pos_emb
+
+        # 5. Transformer Forward (self-attn + cross-attn)
+        for block in self.blocks:
+            x = block(x, act_embs, act_tok_embs)
         x = self.ln_f(x)
-        
-        # 7. 计算 Loss
-        logits = self.head(x) # (B, T, VOCAB_SIZE)
-        
+        logits = self.head(x)
+
         loss = None
         if targets is not None:
-            # targets 的构造需要稍微费点劲
-            # 我们的 x 是: [I0...I0, A0, I1...I1, A1, ...]
-            # 我们希望预测: [I0...I0, I1...I1, A1...] 的下一个
-            # 其实最简单的自回归目标是：输入 idx 的预测目标是 idx+1
-            
-            # 构造完整的 target 序列索引
-            # Image tokens: 0~1023
-            # Action 位置我们不想计算 Loss (因为动作是连续值，且是给定的条件，不是预测目标)
-            # 所以我们在 target 里把 Action 的位置设为 -1 (ignore_index)
-            
-            # 准备 Target Tensor
-            # 原始 targets 是输入的 token_seq，但是我们需要把它们按顺序排好
-            # (B, seq_len, 256) -> (B, seq_len * 257) ? 不对，这里只有256个
-            
-            flat_tokens = token_seq.view(B, -1) # (B, seq_len * 256)
-            # 我们需要构造一个和 x 一样长的 (B, seq_len * 257) 的 target 矩阵
-            # 其中 Image 位置填 Image Token，Action 位置填 -1
-            
-            target_seq = torch.full((B, seq_len, 257), -1, dtype=torch.long, device=DEVICE)
-            target_seq[:, :, :256] = token_seq
-            target_seq = target_seq.view(B, -1) # (B, T)
-
-            # Shift predict:
-            # logits预测的是下一个词。所以 logits[:, :-1] 应该预测 target_seq[:, 1:]
-            
-            logits = logits[:, :-1, :]
+            target_seq = flat_tokens[:, :T]
+            logits_for_loss = logits[:, :-1, :]
             target_seq = target_seq[:, 1:]
-            
-            # Flatten for loss
-            loss = F.cross_entropy(logits.reshape(-1, VOCAB_SIZE), target_seq.reshape(-1), ignore_index=-1)
+            loss = F.cross_entropy(logits_for_loss.reshape(-1, VOCAB_SIZE), target_seq.reshape(-1))
 
         return logits, loss
 
 # ================= 3. 训练主循环 =================
 def main():
     # 1. 准备数据
-    dataset = WorldModelDataset(DATA_PATH, seq_len=int(BLOCK_SIZE/257))
+    dataset = WorldModelDataset(DATA_PATH, seq_len=CONTEXT_FRAMES)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
     
     # 2. 初始化模型
@@ -268,7 +283,31 @@ def main():
             optimizer.zero_grad()
             
             # Forward (传入 tokens 作为 target)
-            _, loss = model(tokens, actions, targets=tokens)
+            logits, loss = model(tokens, actions, targets=tokens)
+            smooth_loss = None
+            if TEMPORAL_SMOOTH_WEIGHT > 0 and logits is not None:
+                B, seq_len, _ = tokens.shape
+                if seq_len > 1:
+                    flat_tokens = tokens.view(B, -1)
+                    logits_for_target = logits[:, :-1, :]
+                    start = TOKENS_PER_FRAME - 1
+                    if logits_for_target.size(1) > start:
+                        smooth_logits = logits_for_target[:, start:, :]
+                        smooth_logits = smooth_logits.view(B, seq_len - 1, TOKENS_PER_FRAME, VOCAB_SIZE)
+                        prev_tokens = flat_tokens[:, :-TOKENS_PER_FRAME].view(B, seq_len - 1, TOKENS_PER_FRAME)
+                        smooth_loss = F.cross_entropy(
+                            smooth_logits.reshape(-1, VOCAB_SIZE),
+                            prev_tokens.reshape(-1),
+                            reduction="none",
+                        )
+                        smooth_loss = smooth_loss.view(B, seq_len - 1, TOKENS_PER_FRAME)
+                        if TEMPORAL_SMOOTH_USE_ACTION:
+                            action_mag = torch.norm(actions[:, 1:, :], dim=-1)
+                            weight = torch.exp(-TEMPORAL_SMOOTH_ACTION_BETA * action_mag).unsqueeze(-1)
+                            smooth_loss = (smooth_loss * weight).mean()
+                        else:
+                            smooth_loss = smooth_loss.mean()
+                        loss = loss + TEMPORAL_SMOOTH_WEIGHT * smooth_loss
             
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # 梯度裁剪防止爆炸
@@ -277,7 +316,10 @@ def main():
             total_loss += loss.item()
             
             if i % 10 == 0:
-                print(f"Epoch {epoch} | Step {i}/{len(dataloader)} | Loss: {loss.item():.4f}")
+                if smooth_loss is None:
+                    print(f"Epoch {epoch} | Step {i}/{len(dataloader)} | Loss: {loss.item():.4f}")
+                else:
+                    print(f"Epoch {epoch} | Step {i}/{len(dataloader)} | Loss: {loss.item():.4f} | Smooth: {smooth_loss.item():.4f}")
         
         avg_loss = total_loss / len(dataloader)
         print(f"✅ Epoch {epoch} Done. Avg Loss: {avg_loss:.4f}. Time: {time.time()-start_time:.1f}s")

@@ -58,8 +58,8 @@ def test_teacher_forcing():
             logits, _ = gpt(full_input_tokens, full_input_actions)
             
             # 取出对应位置的 logit
-            # 历史长度 seq_len=4. 对应 flattened index 是 4 * 257 + i - 1
-            idx_in_flat = seq_len * 257 + i - 1
+            # 历史长度 seq_len=4. 对应 flattened index 是 4 * 256 + i - 1
+            idx_in_flat = seq_len * 256 + i - 1
             if idx_in_flat >= logits.shape[1]: idx_in_flat = logits.shape[1]-1
 
             next_logit = logits[:, idx_in_flat, :]

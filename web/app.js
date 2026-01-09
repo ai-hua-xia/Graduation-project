@@ -13,10 +13,6 @@ const statusDot = document.getElementById("statusDot");
 const statusText = document.getElementById("statusText");
 const fpsValue = document.getElementById("fpsValue");
 const styleNote = document.getElementById("styleNote");
-const throttleFill = document.getElementById("throttleFill");
-const steerFill = document.getElementById("steerFill");
-const contextFill = document.getElementById("contextFill");
-const tempFill = document.getElementById("tempFill");
 
 const streams = {
   real: { video: null, mode: "demo" },
@@ -118,17 +114,6 @@ function drawVideoFrame(ctx, video) {
   ctx.drawImage(video, 0, 0, ctx.canvas.width, ctx.canvas.height);
 }
 
-function updateMeters(time) {
-  const throttle = (Math.sin(time * 0.001) + 1) / 2;
-  const steer = (Math.cos(time * 0.0013) + 1) / 2;
-  const context = (Math.sin(time * 0.0007) + 1) / 2;
-  const temp = (Math.cos(time * 0.0009) + 1) / 2;
-  throttleFill.style.width = `${30 + throttle * 70}%`;
-  steerFill.style.width = `${20 + steer * 80}%`;
-  contextFill.style.width = `${40 + context * 60}%`;
-  tempFill.style.width = `${35 + temp * 65}%`;
-}
-
 function tick(time) {
   const realStream = streams.real;
   const dreamStream = streams.dream[activeStyle] || { mode: "demo" };
@@ -144,8 +129,6 @@ function tick(time) {
   } else {
     drawDemoFrame(dreamCtx, time, "dream");
   }
-
-  updateMeters(time);
 
   frameCount += 1;
   if (time - lastFrameTime > 1000) {

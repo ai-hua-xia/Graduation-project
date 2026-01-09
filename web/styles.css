@@ -223,35 +223,6 @@ body {
   animation-direction: reverse;
 }
 
-.viewport-footer {
-  display: grid;
-  gap: 10px;
-}
-
-.meter {
-  display: grid;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.meter-bar {
-  height: 8px;
-  border-radius: 999px;
-  background: var(--panel-2);
-  overflow: hidden;
-}
-
-.meter-fill {
-  height: 100%;
-  width: 30%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  transition: width 0.3s ease;
-}
-
 .control {
   display: flex;
   flex-direction: column;
@@ -373,20 +344,6 @@ body {
 
 .file-row input {
   font-size: 12px;
-}
-
-.key-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.key {
-  padding: 10px 0;
-  border-radius: 10px;
-  background: var(--panel-2);
-  text-align: center;
-  font-weight: 600;
 }
 
 .hint {
