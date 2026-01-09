@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>World Model Live Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg-grid"></div>
+    <div class="bg-orb bg-orb--left"></div>
+    <div class="bg-orb bg-orb--right"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <div class="brand-text">
+          <div class="brand-title">World Model Console</div>
+          <div class="brand-subtitle">MetaDrive Live + Style Decoder</div>
+        </div>
+      </div>
+      <div class="status">
+        <div class="status-dot" id="statusDot"></div>
+        <div class="status-text" id="statusText">demo mode</div>
+        <div class="status-fps">fps <span id="fpsValue">0</span></div>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="viewport viewport--left" data-reveal="1">
+        <div class="viewport-header">
+          <div class="viewport-title">Reality Feed</div>
+          <div class="viewport-meta">MetaDrive observer</div>
+        </div>
+        <div class="viewport-frame">
+          <canvas id="realCanvas" width="512" height="512"></canvas>
+          <div class="scanline"></div>
+          <div class="viewport-tag">RAW</div>
+        </div>
+        <div class="viewport-footer">
+          <div class="meter">
+            <span>throttle</span>
+            <div class="meter-bar"><div class="meter-fill" id="throttleFill"></div></div>
+          </div>
+          <div class="meter">
+            <span>steer</span>
+            <div class="meter-bar"><div class="meter-fill" id="steerFill"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="control" data-reveal="2">
+        <div class="control-card">
+          <div class="card-title">Style Adapter</div>
+          <div class="dial" id="styleDial">
+            <div class="dial-core"></div>
+            <div class="dial-pointer"></div>
+            <div class="dial-ticks">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+          <div class="style-buttons">
+            <button class="style-btn is-active" data-style="night">Night</button>
+            <button class="style-btn" data-style="fog">Fog</button>
+            <button class="style-btn" data-style="snow">Snow</button>
+          </div>
+          <div class="style-note" id="styleNote">
+            decoder: night
+          </div>
+        </div>
+
+        <div class="control-card">
+          <div class="card-title">Input Sources</div>
+          <label class="file-row">
+            <span>Reality feed</span>
+            <input type="file" accept="video/*" data-target="real" />
+          </label>
+          <label class="file-row">
+            <span>Dream night</span>
+            <input type="file" accept="video/*" data-target="dream-night" />
+          </label>
+          <label class="file-row">
+            <span>Dream fog</span>
+            <input type="file" accept="video/*" data-target="dream-fog" />
+          </label>
+          <label class="file-row">
+            <span>Dream snow</span>
+            <input type="file" accept="video/*" data-target="dream-snow" />
+          </label>
+          <div class="hint">
+            Upload night/fog/snow once, then switch styles with the buttons.
+          </div>
+        </div>
+
+        <div class="control-card">
+          <div class="card-title">Controls</div>
+          <div class="key-grid">
+            <div class="key">W</div>
+            <div class="key">A</div>
+            <div class="key">S</div>
+            <div class="key">D</div>
+            <div class="key">Space</div>
+            <div class="key">Shift</div>
+          </div>
+          <div class="hint">
+            Bind these keys in your runtime to drive MetaDrive and feed actions
+            to the model.
+          </div>
+        </div>
+      </section>
+
+      <section class="viewport viewport--right" data-reveal="3">
+        <div class="viewport-header">
+          <div class="viewport-title">Imagination Feed</div>
+          <div class="viewport-meta">VQ-VAE + World Model</div>
+        </div>
+        <div class="viewport-frame">
+          <canvas id="dreamCanvas" width="512" height="512"></canvas>
+          <div class="scanline scanline--reverse"></div>
+          <div class="viewport-tag viewport-tag--accent">DREAM</div>
+        </div>
+        <div class="viewport-footer">
+          <div class="meter">
+            <span>context</span>
+            <div class="meter-bar"><div class="meter-fill" id="contextFill"></div></div>
+          </div>
+          <div class="meter">
+            <span>temp</span>
+            <div class="meter-bar"><div class="meter-fill" id="tempFill"></div></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div>Adapter decoding runs locally. No network needed.</div>
+      <div>Use a small http server to view: python -m http.server</div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -190,15 +190,28 @@ def main():
 
             print(f"Frame {step + 1}/{STEPS_TO_DREAM} generated. Time: {time.time() - t0:.2f}s")
 
-    print("💾 Saving video...")
+    print("💾 Saving video (step 1: raw export)...")
     height, width, layers = generated_frames[0].shape
+    temp_output = "temp_dream_raw.mp4"
     video = cv2.VideoWriter(
-        OUTPUT_VIDEO, cv2.VideoWriter_fourcc(*"mp4v"), 10, (width, height)
+        temp_output, cv2.VideoWriter_fourcc(*"mp4v"), 10, (width, height)
     )
     for frame in generated_frames:
         video.write(frame)
     video.release()
-    print(f"✅ Dream video saved to {OUTPUT_VIDEO}")
+
+    print("⚙️ Auto-converting to H.264 for VS Code compatibility...")
+    convert_cmd = (
+        f"ffmpeg -y -i {temp_output} -vcodec libx264 -pix_fmt yuv420p "
+        f"-loglevel error {OUTPUT_VIDEO}"
+    )
+    exit_code = os.system(convert_cmd)
+    if exit_code == 0:
+        if os.path.exists(temp_output):
+            os.remove(temp_output)
+        print(f"✅ Dream video saved to {OUTPUT_VIDEO} (VS Code 可直接播放)")
+    else:
+        print(f"⚠️ 转码失败 (可能未安装 ffmpeg)，请下载 {temp_output} 到本地播放。")
 
 
 if __name__ == "__main__":

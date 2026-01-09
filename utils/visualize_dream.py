@@ -24,9 +24,9 @@ VQVAE_PATH = "checkpoints_vqvae_256/vqvae_256_ep99.pth"
 # 这里选一个你刚刚训练出来的最新权重，比如 ep15, ep20 等
 WORLD_MODEL_PATH = "checkpoints_world_model/world_model_ep99.pth" # 👈 修改为你现在的最新模型
 # 风格解码器权重（优先级高于 Adapter；留空则使用原始 VQ-VAE 解码）
-STYLE_DECODER_PATH = "checkpoints_adapter/snow/decoder/decoder_snow_noise_ep29.pth"
+STYLE_DECODER_PATH = ""
 # 适配器权重（留空则使用原始 VQ-VAE 解码）
-ADAPTER_PATH = "checkpoints_adapter/snow/decoder/decoder_snow_noise_ep29.pth"
+ADAPTER_PATH = "checkpoints_adapter/fog/adapter_fog_ep29.pth"
 ADAPTER_BOTTLENECK = 64
 
 # 2. 数据路径 (用来提取第一帧作为种子)
