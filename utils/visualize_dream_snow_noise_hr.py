@@ -42,6 +42,22 @@ STEER_SCALE = 1.0
 THROTTLE_SCALE = 1.0
 TARGET_FPS = 0
 OVERLAY_WASD = True
+# 后处理稳态 (EMA)
+USE_TEMPORAL_SMOOTH = True
+SMOOTH_ALPHA_MIN = 0.15
+SMOOTH_ALPHA_MAX = 0.75
+SMOOTH_DIFF_REF = 12.0
+SMOOTH_CUT_DIFF = 28.0
+SMOOTH_BLUR_KSIZE = 7
+SMOOTH_BLUR_SIGMA = 1.2
+SMOOTH_LOG_EVERY = 0
+# 动作后处理 (限制幅度 + 平滑变化)
+USE_ACTION_FILTER = True
+ACTION_CLAMP_STEER = 0.25
+ACTION_CLAMP_THROTTLE = 0.6
+ACTION_SMOOTH_ALPHA = 0.35
+ACTION_MAX_DELTA_STEER = 0.08
+ACTION_MAX_DELTA_THROTTLE = 0.12
 # =======================================
 
 
@@ -204,6 +220,57 @@ def draw_wasd_overlay(frame_bgr: np.ndarray, action: np.ndarray | None, active: 
     draw_key("S", x0 + size + gap, y0 + size + gap, key_s)
     draw_key("D", x0 + (size + gap) * 2, y0 + size + gap, key_d)
 
+
+def apply_temporal_smoothing(frame_bgr: np.ndarray, prev_smoothed: np.ndarray | None):
+    if prev_smoothed is None:
+        return frame_bgr, frame_bgr.astype(np.float32), None, None
+    curr = frame_bgr.astype(np.float32)
+    diff = float(np.mean(np.abs(curr - prev_smoothed)))
+    if SMOOTH_CUT_DIFF and diff >= SMOOTH_CUT_DIFF:
+        return frame_bgr, curr, diff, 1.0
+    k = int(SMOOTH_BLUR_KSIZE)
+    if k % 2 == 0:
+        k += 1
+    if k < 3:
+        k = 3
+    blur_curr = cv2.GaussianBlur(curr, (k, k), SMOOTH_BLUR_SIGMA)
+    blur_prev = cv2.GaussianBlur(prev_smoothed, (k, k), SMOOTH_BLUR_SIGMA)
+    t = min(diff / SMOOTH_DIFF_REF, 1.0) if SMOOTH_DIFF_REF > 0 else 1.0
+    alpha = SMOOTH_ALPHA_MIN + (SMOOTH_ALPHA_MAX - SMOOTH_ALPHA_MIN) * t
+    low = alpha * blur_curr + (1.0 - alpha) * blur_prev
+    high = curr - blur_curr
+    blended = np.clip(low + high, 0.0, 255.0)
+    return blended.astype(np.uint8), blended, diff, alpha
+
+
+def apply_action_filter(action_np: np.ndarray, prev_action_np: np.ndarray | None):
+    action = action_np.astype(np.float32).copy()
+    if ACTION_CLAMP_STEER is not None:
+        action[0] = np.clip(action[0], -ACTION_CLAMP_STEER, ACTION_CLAMP_STEER)
+    if ACTION_CLAMP_THROTTLE is not None:
+        action[1] = np.clip(action[1], -ACTION_CLAMP_THROTTLE, ACTION_CLAMP_THROTTLE)
+
+    if prev_action_np is None:
+        prev_action_np = action.copy()
+
+    if ACTION_MAX_DELTA_STEER is not None or ACTION_MAX_DELTA_THROTTLE is not None:
+        delta = action - prev_action_np
+        max_ds = ACTION_MAX_DELTA_STEER if ACTION_MAX_DELTA_STEER is not None else 1.0
+        max_dt = ACTION_MAX_DELTA_THROTTLE if ACTION_MAX_DELTA_THROTTLE is not None else 1.0
+        delta[0] = float(np.clip(delta[0], -max_ds, max_ds))
+        delta[1] = float(np.clip(delta[1], -max_dt, max_dt))
+        action = prev_action_np + delta
+
+    if ACTION_SMOOTH_ALPHA is not None:
+        alpha = float(np.clip(ACTION_SMOOTH_ALPHA, 0.0, 1.0))
+        action = prev_action_np * (1.0 - alpha) + action * alpha
+
+    if ACTION_CLAMP_STEER is not None:
+        action[0] = np.clip(action[0], -ACTION_CLAMP_STEER, ACTION_CLAMP_STEER)
+    if ACTION_CLAMP_THROTTLE is not None:
+        action[1] = np.clip(action[1], -ACTION_CLAMP_THROTTLE, ACTION_CLAMP_THROTTLE)
+
+    return action.astype(np.float32), action.astype(np.float32)
 def generate_snow_mask(height: int, width: int, rng: np.random.Generator) -> np.ndarray:
     mask = np.zeros((height, width), dtype=np.float32)
     num_flakes = int(height * width * rng.uniform(0.0006, 0.0012))
@@ -319,7 +386,11 @@ def main():
         snow_mask=snow_mask_static,
         overlay_scale=overlay_scale,
     )
-    generated_frames.append(cv2.cvtColor(first_frame, cv2.COLOR_RGB2BGR))
+    frame_bgr = cv2.cvtColor(first_frame, cv2.COLOR_RGB2BGR)
+    prev_smoothed = None
+    if USE_TEMPORAL_SMOOTH:
+        frame_bgr, prev_smoothed, _, _ = apply_temporal_smoothing(frame_bgr, prev_smoothed)
+    generated_frames.append(frame_bgr)
 
     print(f"🚀 Dreaming start! Context window: {BLOCK_SIZE} tokens")
     stop_dream = False
@@ -327,6 +398,7 @@ def main():
     manual_action_np = None
     manual_action_tensor = None
     manual_active = False
+    prev_action_np = None
     with torch.no_grad():
         current_tokens = context_tokens
         current_actions = auto_actions[:, 0:1, :]
@@ -358,6 +430,11 @@ def main():
                         manual_repeat = max(KEYBOARD_REPEAT_FRAMES - 1, 0)
                     elif not KEYBOARD_FALLBACK_TO_DATA:
                         this_step_action = torch.zeros_like(auto_step_action)
+
+            if USE_ACTION_FILTER:
+                action_np = this_step_action.detach().cpu().numpy().reshape(-1)
+                action_np, prev_action_np = apply_action_filter(action_np, prev_action_np)
+                this_step_action = torch.from_numpy(action_np).view(1, 1, 2).to(DEVICE)
 
             MAX_CONTEXT_FRAMES = 3
             if current_tokens.shape[1] > MAX_CONTEXT_FRAMES:
@@ -393,6 +470,10 @@ def main():
                 overlay_scale=overlay_scale,
             )
             frame_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            if USE_TEMPORAL_SMOOTH:
+                frame_bgr, prev_smoothed, diff, alpha = apply_temporal_smoothing(frame_bgr, prev_smoothed)
+                if SMOOTH_LOG_EVERY and diff is not None and (step + 1) % SMOOTH_LOG_EVERY == 0:
+                    print(f"🧊 Smooth: diff={diff:.2f} alpha={alpha:.2f}")
             if OVERLAY_WASD:
                 draw_wasd_overlay(frame_bgr, manual_action_np, manual_active)
             generated_frames.append(frame_bgr)

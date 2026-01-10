@@ -22,7 +22,7 @@ from train.train_world_model import WorldModelGPT, VOCAB_SIZE, TOKENS_PER_FRAME,
 # 1. 模型路径
 VQVAE_PATH = "checkpoints_vqvae_256/vqvae_256_ep99.pth"
 # 这里选一个你刚刚训练出来的最新权重，比如 ep15, ep20 等
-WORLD_MODEL_PATH = "checkpoints_new_world_model/world_model_ep45.pth" # 👈 修改为你现在的最新模型
+WORLD_MODEL_PATH = "checkpoints_new_world_model/world_model_ep99.pth" # 👈 修改为你现在的最新模型
 # 风格解码器权重（优先级高于 Adapter；留空则使用原始 VQ-VAE 解码）
 STYLE_DECODER_PATH = ""
 # 适配器权重（留空则使用原始 VQ-VAE 解码）
@@ -34,9 +34,9 @@ DATA_PATH = "dataset_v2_complex/tokens_actions_vqvae_16x16.npz"
 
 # 3. 生成参数
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-STEPS_TO_DREAM = 50    # 想要让它想象多少帧 (比如 100 帧)
-TEMPERATURE = 0.1       # 0.8: 保守/稳定; 1.0: 正常; 1.2: 更有创造力但也更可能崩坏
-TOP_K = 1             # 只从概率最高的 100 个 token 里采样，防止画面出现乱码
+STEPS_TO_DREAM = 70    # 想要让它想象多少帧 (比如 100 帧)
+TEMPERATURE = 0.3       # 0.8: 保守/稳定; 1.0: 正常; 1.2: 更有创造力但也更可能崩坏
+TOP_K = 3             # 只从概率最高的 100 个 token 里采样，防止画面出现乱码
 
 OUTPUT_VIDEO = "dream_result.mp4"
 # 4. 键盘控制 (可选)
@@ -52,6 +52,22 @@ OVERLAY_WASD = True
 # 5. 动作文件 (可选，每行一个动作: w/a/s/d/space)
 USE_ACTION_FILE = True
 ACTIONS_FILE_PATH = "action.txt"
+# 6. 后处理稳态 (EMA)
+USE_TEMPORAL_SMOOTH = True
+SMOOTH_ALPHA_MIN = 0.15
+SMOOTH_ALPHA_MAX = 0.75
+SMOOTH_DIFF_REF = 12.0
+SMOOTH_CUT_DIFF = 28.0
+SMOOTH_BLUR_KSIZE = 7
+SMOOTH_BLUR_SIGMA = 1.2
+SMOOTH_LOG_EVERY = 0
+# 7. 动作后处理 (限制幅度 + 平滑变化)
+USE_ACTION_FILTER = True
+ACTION_CLAMP_STEER = 0.25
+ACTION_CLAMP_THROTTLE = 0.6
+ACTION_SMOOTH_ALPHA = 0.35
+ACTION_MAX_DELTA_STEER = 0.08
+ACTION_MAX_DELTA_THROTTLE = 0.12
 # =======================================
 
 def key_to_action(key: str, steer_scale: float, throttle_scale: float):
@@ -62,17 +78,18 @@ def key_to_action(key: str, steer_scale: float, throttle_scale: float):
         return None, True
     if key in (" ", "space", "brake"):
         return np.array([0.0, 0.0], dtype=np.float32), False
+    letters = set(key)
     steer = 0.0
     throttle = 0.0
-    if key == "a":
-        steer = -1.0
-    elif key == "d":
-        steer = 1.0
-    elif key == "w":
-        throttle = 1.0
-    elif key == "s":
-        throttle = -1.0
-    else:
+    if "a" in letters:
+        steer -= 1.0
+    if "d" in letters:
+        steer += 1.0
+    if "w" in letters:
+        throttle += 1.0
+    if "s" in letters:
+        throttle -= 1.0
+    if steer == 0.0 and throttle == 0.0:
         return None, False
     action = np.array(
         [steer * steer_scale, throttle * throttle_scale],
@@ -241,6 +258,57 @@ def draw_wasd_overlay(frame_bgr: np.ndarray, action: np.ndarray | None, active: 
     draw_key("S", x0 + size + gap, y0 + size + gap, key_s)
     draw_key("D", x0 + (size + gap) * 2, y0 + size + gap, key_d)
 
+
+def apply_temporal_smoothing(frame_bgr: np.ndarray, prev_smoothed: np.ndarray | None):
+    if prev_smoothed is None:
+        return frame_bgr, frame_bgr.astype(np.float32), None, None
+    curr = frame_bgr.astype(np.float32)
+    diff = float(np.mean(np.abs(curr - prev_smoothed)))
+    if SMOOTH_CUT_DIFF and diff >= SMOOTH_CUT_DIFF:
+        return frame_bgr, curr, diff, 1.0
+    k = int(SMOOTH_BLUR_KSIZE)
+    if k % 2 == 0:
+        k += 1
+    if k < 3:
+        k = 3
+    blur_curr = cv2.GaussianBlur(curr, (k, k), SMOOTH_BLUR_SIGMA)
+    blur_prev = cv2.GaussianBlur(prev_smoothed, (k, k), SMOOTH_BLUR_SIGMA)
+    t = min(diff / SMOOTH_DIFF_REF, 1.0) if SMOOTH_DIFF_REF > 0 else 1.0
+    alpha = SMOOTH_ALPHA_MIN + (SMOOTH_ALPHA_MAX - SMOOTH_ALPHA_MIN) * t
+    low = alpha * blur_curr + (1.0 - alpha) * blur_prev
+    high = curr - blur_curr
+    blended = np.clip(low + high, 0.0, 255.0)
+    return blended.astype(np.uint8), blended, diff, alpha
+
+
+def apply_action_filter(action_np: np.ndarray, prev_action_np: np.ndarray | None):
+    action = action_np.astype(np.float32).copy()
+    if ACTION_CLAMP_STEER is not None:
+        action[0] = np.clip(action[0], -ACTION_CLAMP_STEER, ACTION_CLAMP_STEER)
+    if ACTION_CLAMP_THROTTLE is not None:
+        action[1] = np.clip(action[1], -ACTION_CLAMP_THROTTLE, ACTION_CLAMP_THROTTLE)
+
+    if prev_action_np is None:
+        prev_action_np = action.copy()
+
+    if ACTION_MAX_DELTA_STEER is not None or ACTION_MAX_DELTA_THROTTLE is not None:
+        delta = action - prev_action_np
+        max_ds = ACTION_MAX_DELTA_STEER if ACTION_MAX_DELTA_STEER is not None else 1.0
+        max_dt = ACTION_MAX_DELTA_THROTTLE if ACTION_MAX_DELTA_THROTTLE is not None else 1.0
+        delta[0] = float(np.clip(delta[0], -max_ds, max_ds))
+        delta[1] = float(np.clip(delta[1], -max_dt, max_dt))
+        action = prev_action_np + delta
+
+    if ACTION_SMOOTH_ALPHA is not None:
+        alpha = float(np.clip(ACTION_SMOOTH_ALPHA, 0.0, 1.0))
+        action = prev_action_np * (1.0 - alpha) + action * alpha
+
+    if ACTION_CLAMP_STEER is not None:
+        action[0] = np.clip(action[0], -ACTION_CLAMP_STEER, ACTION_CLAMP_STEER)
+    if ACTION_CLAMP_THROTTLE is not None:
+        action[1] = np.clip(action[1], -ACTION_CLAMP_THROTTLE, ACTION_CLAMP_THROTTLE)
+
+    return action.astype(np.float32), action.astype(np.float32)
 def load_models():
     print("⏳ Loading VQ-VAE...")
     vqvae = VQVAE().to(DEVICE)
@@ -347,7 +415,11 @@ def main():
     
     # 先把第一帧解码出来存着
     first_frame = decode_indices(vqvae, all_tokens[start_idx], adapter=adapter)
-    generated_frames.append(cv2.cvtColor(first_frame, cv2.COLOR_RGB2BGR))
+    frame_bgr = cv2.cvtColor(first_frame, cv2.COLOR_RGB2BGR)
+    prev_smoothed = None
+    if USE_TEMPORAL_SMOOTH:
+        frame_bgr, prev_smoothed, _, _ = apply_temporal_smoothing(frame_bgr, prev_smoothed)
+    generated_frames.append(frame_bgr)
     
     print(f"🚀 Dreaming start! Context window: {BLOCK_SIZE} tokens")
     
@@ -360,6 +432,7 @@ def main():
     file_action_tensor = None
     file_action_idx = 0
     manual_active = False
+    prev_action_np = None
     with torch.no_grad():
         current_tokens = context_tokens # (1, seq_len, 256)
         current_actions = auto_actions[:, 0:1, :] # 取第一个动作 (1, 1, 2)
@@ -412,7 +485,12 @@ def main():
                         manual_repeat = max(KEYBOARD_REPEAT_FRAMES - 1, 0)
                     elif not KEYBOARD_FALLBACK_TO_DATA:
                         this_step_action = torch.zeros_like(auto_step_action)
-            
+
+            if USE_ACTION_FILTER:
+                action_np = this_step_action.detach().cpu().numpy().reshape(-1)
+                action_np, prev_action_np = apply_action_filter(action_np, prev_action_np)
+                this_step_action = torch.from_numpy(action_np).view(1, 1, 2).to(DEVICE)
+
             # 这里的滑动窗口逻辑
             MAX_CONTEXT_FRAMES = 3
             if current_tokens.shape[1] > MAX_CONTEXT_FRAMES:
@@ -452,6 +530,10 @@ def main():
             # 注意：decode_indices 需要 numpy 格式
             img_np = decode_indices(vqvae, new_frame_tokens.reshape(16, 16).cpu().numpy(), adapter=adapter)
             frame_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            if USE_TEMPORAL_SMOOTH:
+                frame_bgr, prev_smoothed, diff, alpha = apply_temporal_smoothing(frame_bgr, prev_smoothed)
+                if SMOOTH_LOG_EVERY and diff is not None and (step + 1) % SMOOTH_LOG_EVERY == 0:
+                    print(f"🧊 Smooth: diff={diff:.2f} alpha={alpha:.2f}")
             if OVERLAY_WASD:
                 draw_wasd_overlay(frame_bgr, manual_action_np, manual_active)
             generated_frames.append(frame_bgr)
