@@ -19,6 +19,10 @@
           <div class="brand-subtitle">MetaDrive Live + Style Decoder</div>
         </div>
       </div>
+      <div class="mode-toggle">
+        <button class="mode-btn is-active" data-mode="style">Style Compare</button>
+        <button class="mode-btn" data-mode="action">Action Compare</button>
+      </div>
       <div class="status">
         <div class="status-dot" id="statusDot"></div>
         <div class="status-text" id="statusText">demo mode</div>
@@ -29,8 +33,8 @@
     <main class="stage">
       <section class="viewport viewport--left" data-reveal="1">
         <div class="viewport-header">
-          <div class="viewport-title">Reality Feed</div>
-          <div class="viewport-meta">MetaDrive observer</div>
+          <div class="viewport-title" id="leftTitle">Reality Feed</div>
+          <div class="viewport-meta" id="leftMeta">MetaDrive observer</div>
         </div>
         <div class="viewport-frame">
           <canvas id="realCanvas" width="512" height="512"></canvas>
@@ -40,7 +44,7 @@
       </section>
 
       <section class="control" data-reveal="2">
-        <div class="control-card">
+        <div class="control-card mode-section mode-style">
           <div class="card-title">Style Adapter</div>
           <div class="dial" id="styleDial">
             <div class="dial-core"></div>
@@ -59,7 +63,7 @@
           </div>
         </div>
 
-        <div class="control-card">
+        <div class="control-card mode-section mode-style">
           <div class="card-title">Input Sources</div>
           <label class="file-row">
             <span>Reality feed</span>
@@ -82,12 +86,49 @@
           </div>
         </div>
 
+        <div class="control-card mode-section mode-action is-hidden">
+          <div class="card-title">Action Compare Inputs</div>
+          <label class="file-row">
+            <span>No-action dream</span>
+            <input type="file" accept="video/*" data-target="action-base" />
+          </label>
+          <label class="file-row">
+            <span>Action dream</span>
+            <input type="file" accept="video/*" data-target="action-dream" />
+          </label>
+          <label class="file-row">
+            <span>Action file</span>
+            <input type="file" accept=".txt" data-target="action-file" />
+          </label>
+          <label class="file-row">
+            <span>Frames/action</span>
+            <input type="number" id="framesPerAction" min="1" max="60" value="15" />
+          </label>
+          <label class="file-row">
+            <span>Video FPS</span>
+            <input type="number" id="videoFps" min="1" max="60" value="10" />
+          </label>
+          <div class="hint">
+            Upload both videos and the action.txt used to generate them.
+          </div>
+        </div>
+
+        <div class="control-card mode-section mode-action is-hidden">
+          <div class="card-title">Diff + Steering Curve</div>
+          <div class="diff-frame">
+            <canvas id="diffCanvas" width="256" height="256"></canvas>
+          </div>
+          <div class="hint">
+            Heatmap shows pixel difference. Curve overlays steer (cyan) and cumulative steer (orange).
+          </div>
+        </div>
+
       </section>
 
       <section class="viewport viewport--right" data-reveal="3">
         <div class="viewport-header">
-          <div class="viewport-title">Imagination Feed</div>
-          <div class="viewport-meta">VQ-VAE + World Model</div>
+          <div class="viewport-title" id="rightTitle">Imagination Feed</div>
+          <div class="viewport-meta" id="rightMeta">VQ-VAE + World Model</div>
         </div>
         <div class="viewport-frame">
           <canvas id="dreamCanvas" width="512" height="512"></canvas>
