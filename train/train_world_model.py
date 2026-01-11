@@ -8,9 +8,10 @@ import math
 import time
 
 # ================= 配置区域 =================
-DATA_PATH = "dataset_v2_complex/tokens_actions_vqvae_16x16.npz"
-OUT_DIR = "checkpoints_new_world_model"
+DATA_PATH = "dataset_rich_actions/tokens_actions_vqvae_16x16.npz"
+OUT_DIR = "checkpoints_new_rich_world_model"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+RESUME_PATH = "checkpoints_new_rich_world_model/world_model_ep129.pth"  # 可选：指定继续训练的checkpoint路径，留空则自动找OUT_DIR里最新的
 
 # 模型参数
 VOCAB_SIZE = 1024       # VQ-VAE 的词表大小
@@ -25,9 +26,9 @@ USE_ACTION_FILM = True   # 动作 FiLM 调制 (更强的条件注入)
 TOKENS_PER_FRAME = 256  # 16x16
 CONTEXT_FRAMES = 4      # 上下文帧数
 BLOCK_SIZE = TOKENS_PER_FRAME * CONTEXT_FRAMES
-BATCH_SIZE = 16         # 显存不够就改小，比如 8 或 4
+BATCH_SIZE = 64         # 显存不够就改小，比如 8 或 4
 LEARNING_RATE = 3e-4
-MAX_EPOCHS = 100
+MAX_EPOCHS = 180
 SAVE_EVERY = 5          # 每多少轮保存一次
 TEMPORAL_SMOOTH_WEIGHT = 0.08  # 时间一致性正则权重 (0 关闭)
 TEMPORAL_SMOOTH_USE_ACTION = True
@@ -259,11 +260,17 @@ def main():
     
     # 3. 尝试加载断点
     start_epoch = 0
-    checkpoints = sorted([f for f in os.listdir(OUT_DIR) if f.endswith(".pth")])
-    if checkpoints:
-        latest = os.path.join(OUT_DIR, checkpoints[-1])
-        print(f"🔄 Resuming from {latest}")
-        ckpt = torch.load(latest, map_location=DEVICE)
+    resume_path = RESUME_PATH
+    if resume_path:
+        if not os.path.exists(resume_path):
+            raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
+    else:
+        checkpoints = sorted([f for f in os.listdir(OUT_DIR) if f.endswith(".pth")])
+        if checkpoints:
+            resume_path = os.path.join(OUT_DIR, checkpoints[-1])
+    if resume_path:
+        print(f"🔄 Resuming from {resume_path}")
+        ckpt = torch.load(resume_path, map_location=DEVICE)
         model.load_state_dict(ckpt['model'])
         optimizer.load_state_dict(ckpt['optimizer'])
         start_epoch = ckpt['epoch'] + 1

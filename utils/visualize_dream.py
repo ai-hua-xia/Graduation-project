@@ -22,7 +22,7 @@ from train.train_world_model import WorldModelGPT, VOCAB_SIZE, TOKENS_PER_FRAME,
 # 1. 模型路径
 VQVAE_PATH = "checkpoints_vqvae_256/vqvae_256_ep99.pth"
 # 这里选一个你刚刚训练出来的最新权重，比如 ep15, ep20 等
-WORLD_MODEL_PATH = "checkpoints_new_world_model/world_model_ep99.pth" # 👈 修改为你现在的最新模型
+WORLD_MODEL_PATH = "checkpoints_new_rich_world_model/world_model_ep179.pth" # 👈 修改为你现在的最新模型
 # 风格解码器权重（优先级高于 Adapter；留空则使用原始 VQ-VAE 解码）
 STYLE_DECODER_PATH = ""
 # 适配器权重（留空则使用原始 VQ-VAE 解码）
@@ -30,25 +30,26 @@ ADAPTER_PATH = ""
 ADAPTER_BOTTLENECK = 64
 
 # 2. 数据路径 (用来提取第一帧作为种子)
-DATA_PATH = "dataset_v2_complex/tokens_actions_vqvae_16x16.npz"
+DATA_PATH = "dataset_rich_actions/tokens_actions_vqvae_16x16.npz"
 
 # 3. 生成参数
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-STEPS_TO_DREAM = 70    # 想要让它想象多少帧 (比如 100 帧)
-TEMPERATURE = 0.3       # 0.8: 保守/稳定; 1.0: 正常; 1.2: 更有创造力但也更可能崩坏
-TOP_K = 3             # 只从概率最高的 100 个 token 里采样，防止画面出现乱码
+STEPS_TO_DREAM = 120    # 想要让它想象多少帧 (比如 100 帧)
+TEMPERATURE = 0.1       # 0.8: 保守/稳定; 1.0: 正常; 1.2: 更有创造力但也更可能崩坏
+TOP_K = 1             # 只从概率最高的 100 个 token 里采样，防止画面出现乱码
 
-OUTPUT_VIDEO = "dream_result.mp4"
+OUTPUT_VIDEO = "dream_action.mp4"
 # 4. 键盘控制 (可选)
 USE_KEYBOARD = True
 KEYBOARD_FALLBACK_TO_DATA = False
 KEYBOARD_WAIT_FOR_INPUT = True
 KEYBOARD_BACKEND = "terminal"  # "terminal" or "pygame"
-KEYBOARD_REPEAT_FRAMES = 10
+KEYBOARD_REPEAT_FRAMES = 15  # 按键保持多少帧
+# 控制比例
 STEER_SCALE = 1.0
 THROTTLE_SCALE = 1.0
 TARGET_FPS = 0
-OVERLAY_WASD = True
+OVERLAY_WASD = False
 # 5. 动作文件 (可选，每行一个动作: w/a/s/d/space)
 USE_ACTION_FILE = True
 ACTIONS_FILE_PATH = "action.txt"
@@ -65,9 +66,10 @@ SMOOTH_LOG_EVERY = 0
 USE_ACTION_FILTER = True
 ACTION_CLAMP_STEER = 0.25
 ACTION_CLAMP_THROTTLE = 0.6
-ACTION_SMOOTH_ALPHA = 0.35
-ACTION_MAX_DELTA_STEER = 0.08
-ACTION_MAX_DELTA_THROTTLE = 0.12
+ACTION_SMOOTH_ALPHA = 0.55
+ACTION_MAX_DELTA_STEER = 0.12
+ACTION_MAX_DELTA_THROTTLE = 0.15
+INVERT_STEER_FOR_MODEL = True
 # =======================================
 
 def key_to_action(key: str, steer_scale: float, throttle_scale: float):
@@ -489,6 +491,9 @@ def main():
             if USE_ACTION_FILTER:
                 action_np = this_step_action.detach().cpu().numpy().reshape(-1)
                 action_np, prev_action_np = apply_action_filter(action_np, prev_action_np)
+                if INVERT_STEER_FOR_MODEL and manual_active:
+                    action_np[0] = -action_np[0]
+                    prev_action_np = action_np.copy()
                 this_step_action = torch.from_numpy(action_np).view(1, 1, 2).to(DEVICE)
 
             # 这里的滑动窗口逻辑

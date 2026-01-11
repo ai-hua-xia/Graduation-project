@@ -7,43 +7,53 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+# 允许从子目录直接运行
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from train.train_vqvae_256 import VQVAE, IMAGE_SIZE
-from train.train_world_model import WorldModelGPT, TOKENS_PER_FRAME, BLOCK_SIZE
-from train.train_snow_decoder_noise_hr import SnowOverlayNet
+# 导入你的模型定义
+# 如果报错说找不到模块，请确保文件名一致
+from train.train_vqvae_256 import VQVAE, IMAGE_SIZE, EMBED_DIM
+from train.train_adapter import LatentAdapter
+from train.train_world_model import WorldModelGPT, VOCAB_SIZE, TOKENS_PER_FRAME, BLOCK_SIZE
 
 # ================= 配置 =================
+# 1. 模型路径
 VQVAE_PATH = "checkpoints_vqvae_256/vqvae_256_ep99.pth"
-WORLD_MODEL_PATH = "checkpoints_world_model/world_model_ep99.pth"
-SNOW_CKPT_PATH = "checkpoints_adapter/snow/decoder_snow_noise_hr_ep29.pth"
+# 这里选一个你刚刚训练出来的最新权重，比如 ep15, ep20 等
+WORLD_MODEL_PATH = "checkpoints_new_rich_world_model/world_model_ep179.pth" # 👈 修改为你现在的最新模型
+# 风格解码器权重（优先级高于 Adapter；留空则使用原始 VQ-VAE 解码）
+STYLE_DECODER_PATH = ""
+# 适配器权重（留空则使用原始 VQ-VAE 解码）
+ADAPTER_PATH = ""
+ADAPTER_BOTTLENECK = 64
 
-DATA_PATH = "dataset_v2_complex/tokens_actions_vqvae_16x16.npz"
+# 2. 数据路径 (用来提取第一帧作为种子)
+DATA_PATH = "dataset_rich_actions/tokens_actions_vqvae_16x16.npz"
 
+# 3. 生成参数
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-STEPS_TO_DREAM = 50
-TEMPERATURE = 0.2
-TOP_K = 1
+STEPS_TO_DREAM = 120    # 想要让它想象多少帧 (比如 100 帧)
+TEMPERATURE = 0.2       # 更确定性，便于观察转向偏移
+TOP_K = 1             # 贪婪采样，减少随机性干扰
 
-SNOW_STATIC = True
-SNOW_SEED = 42
-SNOW_OVERLAY_SCALE = None
-
-OUTPUT_VIDEO = "dream_result.mp4"
-# 键盘控制 (可选)
+OUTPUT_VIDEO = "dream_result_turning.mp4"
+# 4. 键盘控制 (可选)
 USE_KEYBOARD = True
 KEYBOARD_FALLBACK_TO_DATA = False
 KEYBOARD_WAIT_FOR_INPUT = True
 KEYBOARD_BACKEND = "terminal"  # "terminal" or "pygame"
-KEYBOARD_REPEAT_FRAMES = 10
+KEYBOARD_REPEAT_FRAMES = 15
 STEER_SCALE = 1.0
 THROTTLE_SCALE = 1.0
 TARGET_FPS = 0
 OVERLAY_WASD = True
-# 后处理稳态 (EMA)
-USE_TEMPORAL_SMOOTH = True
+# 5. 动作文件 (可选，每行一个动作: w/a/s/d/space)
+USE_ACTION_FILE = True
+ACTIONS_FILE_PATH = "action.txt"
+# 6. 后处理稳态 (EMA)
+USE_TEMPORAL_SMOOTH = False
 SMOOTH_ALPHA_MIN = 0.15
 SMOOTH_ALPHA_MAX = 0.75
 SMOOTH_DIFF_REF = 12.0
@@ -51,16 +61,68 @@ SMOOTH_CUT_DIFF = 28.0
 SMOOTH_BLUR_KSIZE = 7
 SMOOTH_BLUR_SIGMA = 1.2
 SMOOTH_LOG_EVERY = 0
-# 动作后处理 (限制幅度 + 平滑变化)
+# 7. 动作后处理 (限制幅度 + 平滑变化)
 USE_ACTION_FILTER = True
-ACTION_CLAMP_STEER = 0.25
-ACTION_CLAMP_THROTTLE = 0.6
-ACTION_SMOOTH_ALPHA = 0.55
-ACTION_MAX_DELTA_STEER = 0.12
-ACTION_MAX_DELTA_THROTTLE = 0.15
+ACTION_GAIN_STEER = 2.5
+ACTION_GAIN_THROTTLE = 1.2
+ACTION_CLAMP_STEER = 0.6
+ACTION_CLAMP_THROTTLE = 0.8
+ACTION_SMOOTH_ALPHA = 1.0
+ACTION_MAX_DELTA_STEER = 1.0
+ACTION_MAX_DELTA_THROTTLE = 1.0
 INVERT_STEER_FOR_MODEL = True
 # =======================================
 
+def key_to_action(key: str, steer_scale: float, throttle_scale: float):
+    key = key.strip().lower()
+    if not key:
+        return None, False
+    if key == "q":
+        return None, True
+    if key in (" ", "space", "brake"):
+        return np.array([0.0, 0.0], dtype=np.float32), False
+    letters = set(key)
+    steer = 0.0
+    throttle = 0.0
+    if "a" in letters:
+        steer -= 1.0
+    if "d" in letters:
+        steer += 1.0
+    if "w" in letters:
+        throttle += 1.0
+    if "s" in letters:
+        throttle -= 1.0
+    if steer == 0.0 and throttle == 0.0:
+        return None, False
+    action = np.array(
+        [steer * steer_scale, throttle * throttle_scale],
+        dtype=np.float32,
+    )
+    action = np.clip(action, -1.0, 1.0)
+    return action, False
+
+def load_actions_from_file(path: str, steer_scale: float, throttle_scale: float):
+    if not path:
+        return []
+    if not os.path.isabs(path):
+        path = os.path.join(PROJECT_ROOT, path)
+    if not os.path.exists(path):
+        print(f"⚠️ Action file not found: {path}")
+        return []
+    actions = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            token = line.strip()
+            if not token or token.startswith("#"):
+                continue
+            action, quit_signal = key_to_action(token, steer_scale, throttle_scale)
+            if quit_signal:
+                break
+            if action is None:
+                print(f"⚠️ Unknown action token in file: {token!r}")
+                continue
+            actions.append(action)
+    return actions
 
 class KeyboardActionSource:
     def __init__(self, steer_scale: float, throttle_scale: float):
@@ -120,29 +182,7 @@ class TerminalActionSource:
         self.throttle_scale = throttle_scale
 
     def _key_to_action(self, key: str):
-        key = key.lower()
-        if key == "q":
-            return None, True
-        if key == " ":
-            return np.array([0.0, 0.0], dtype=np.float32), False
-        steer = 0.0
-        throttle = 0.0
-        if key == "a":
-            steer = -1.0
-        elif key == "d":
-            steer = 1.0
-        elif key == "w":
-            throttle = 1.0
-        elif key == "s":
-            throttle = -1.0
-        else:
-            return None, False
-        action = np.array(
-            [steer * self.steer_scale, throttle * self.throttle_scale],
-            dtype=np.float32,
-        )
-        action = np.clip(action, -1.0, 1.0)
-        return action, False
+        return key_to_action(key, self.steer_scale, self.throttle_scale)
 
     def poll(self):
         import select
@@ -246,6 +286,10 @@ def apply_temporal_smoothing(frame_bgr: np.ndarray, prev_smoothed: np.ndarray | 
 
 def apply_action_filter(action_np: np.ndarray, prev_action_np: np.ndarray | None):
     action = action_np.astype(np.float32).copy()
+    if ACTION_GAIN_STEER is not None:
+        action[0] = action[0] * ACTION_GAIN_STEER
+    if ACTION_GAIN_THROTTLE is not None:
+        action[1] = action[1] * ACTION_GAIN_THROTTLE
     if ACTION_CLAMP_STEER is not None:
         action[0] = np.clip(action[0], -ACTION_CLAMP_STEER, ACTION_CLAMP_STEER)
     if ACTION_CLAMP_THROTTLE is not None:
@@ -272,24 +316,6 @@ def apply_action_filter(action_np: np.ndarray, prev_action_np: np.ndarray | None
         action[1] = np.clip(action[1], -ACTION_CLAMP_THROTTLE, ACTION_CLAMP_THROTTLE)
 
     return action.astype(np.float32), action.astype(np.float32)
-def generate_snow_mask(height: int, width: int, rng: np.random.Generator) -> np.ndarray:
-    mask = np.zeros((height, width), dtype=np.float32)
-    num_flakes = int(height * width * rng.uniform(0.0006, 0.0012))
-    for _ in range(num_flakes):
-        x = int(rng.integers(0, width))
-        y = int(rng.integers(0, height))
-        r = int(rng.integers(1, 3))
-        cv2.circle(mask, (x, y), r, 1.0, -1)
-    if rng.random() < 0.6:
-        for _ in range(num_flakes // 4):
-            x = int(rng.integers(0, width))
-            y = int(rng.integers(0, height))
-            length = int(rng.integers(5, 15))
-            cv2.line(mask, (x, y), (x + length, y + length), 1.0, 1)
-    alpha = rng.uniform(0.2, 0.35)
-    mask = np.clip(mask, 0, 1) * alpha
-    return mask
-
 
 def load_models():
     print("⏳ Loading VQ-VAE...")
@@ -302,60 +328,73 @@ def load_models():
     checkpoint = torch.load(WORLD_MODEL_PATH, map_location=DEVICE)
     gpt.load_state_dict(checkpoint["model"])
     gpt.eval()
+    adapter = None
+    if STYLE_DECODER_PATH:
+        print(f"⏳ Loading Style Decoder from {STYLE_DECODER_PATH}...")
+        ckpt = torch.load(STYLE_DECODER_PATH, map_location=DEVICE)
+        state = ckpt["decoder"] if isinstance(ckpt, dict) and "decoder" in ckpt else ckpt
+        vqvae.decoder.load_state_dict(state, strict=True)
+    elif ADAPTER_PATH:
+        print(f"⏳ Loading Adapter from {ADAPTER_PATH}...")
+        adapter = LatentAdapter(EMBED_DIM, bottleneck=ADAPTER_BOTTLENECK).to(DEVICE)
+        ckpt = torch.load(ADAPTER_PATH, map_location=DEVICE)
+        state = ckpt["adapter"] if isinstance(ckpt, dict) and "adapter" in ckpt else ckpt
+        adapter.load_state_dict(state, strict=True)
+        adapter.eval()
+    return vqvae, gpt, adapter
 
-    overlay_net = None
-    overlay_scale = 0.5
-    if SNOW_CKPT_PATH:
-        print(f"⏳ Loading Snow HR Decoder from {SNOW_CKPT_PATH}...")
-        ckpt = torch.load(SNOW_CKPT_PATH, map_location=DEVICE)
-        overlay_hidden = ckpt.get("overlay_hidden", 64)
-        overlay_net = SnowOverlayNet(hidden=overlay_hidden).to(DEVICE)
-        overlay_net.load_state_dict(ckpt["overlay"], strict=True)
-        overlay_net.eval()
-        overlay_scale = ckpt.get("overlay_scale", overlay_scale)
-        if "decoder" in ckpt:
-            vqvae.decoder.load_state_dict(ckpt["decoder"], strict=True)
-    if SNOW_OVERLAY_SCALE is not None:
-        overlay_scale = SNOW_OVERLAY_SCALE
-    return vqvae, gpt, overlay_net, overlay_scale
-
-
-def decode_indices(vqvae, indices, overlay_net=None, snow_mask=None, overlay_scale=0.5):
+def decode_indices(vqvae, indices, adapter=None):
+    """把 (16, 16) 的 token 矩阵还原成图片"""
     with torch.no_grad():
+        # indices shape: (16, 16) -> (1, 16, 16)
         indices_tensor = torch.LongTensor(indices).unsqueeze(0).to(DEVICE)
-        z_q = vqvae.quantizer.embedding(indices_tensor)
-        z_q = z_q.permute(0, 3, 1, 2)
-        recon = vqvae.decoder(z_q)
-        if overlay_net is not None and snow_mask is not None:
-            overlay = overlay_net(recon, snow_mask)
-            overlay = torch.tanh(overlay) * overlay_scale
-            recon = torch.clamp(recon + overlay, 0.0, 1.0)
-        img = recon[0].cpu().permute(1, 2, 0).numpy()
+        # VQVAE 的 decode_indices 需要 indices 已经是 Embedding 后的还是直接 indices?
+        # 查看之前的 VQVAE 代码，通常需要通过 quantizer 查表。
+        # 为了方便，我们直接用 quantizer 的 embedding 查表功能
+        
+        # 1. 查表获取 quant vectors
+        z_q = vqvae.quantizer.embedding(indices_tensor) # (1, 16, 16, 64)
+        z_q = z_q.permute(0, 3, 1, 2) # (1, 64, 16, 16)
+        
+        # 2. 可选 Adapter + 解码
+        if adapter is not None:
+            z_q = adapter(z_q)
+        decoded_img = vqvae.decoder(z_q)
+        
+        # 3. 转回 numpy 图片格式
+        img = decoded_img[0].cpu().permute(1, 2, 0).numpy()
         img = np.clip(img, 0, 1) * 255
         return img.astype(np.uint8)
 
-
 def sample_next_token(logits, temperature=1.0, top_k=None):
-    logits = logits[:, -1, :] / temperature
+    """从预测结果中采样"""
+    logits = logits[:, -1, :] / temperature # 只取最后一个时间步
     if top_k is not None:
         v, _ = torch.topk(logits, top_k)
-        logits[logits < v[:, [-1]]] = -float("Inf")
+        logits[logits < v[:, [-1]]] = -float('Inf')
+    
     probs = F.softmax(logits, dim=-1)
     idx = torch.multinomial(probs, num_samples=1)
     return idx
 
-
 def main():
-    vqvae, gpt, overlay_net, overlay_scale = load_models()
-
+    vqvae, gpt, adapter = load_models()
+    
+    # 1. 加载真实数据作为“种子”
     print("🌱 Loading Seed Data...")
     data = np.load(DATA_PATH)
-    all_tokens = data["tokens"]
-    all_actions = data["actions"]
-
+    all_tokens = data['tokens']   # (N, 16, 16)
+    all_actions = data['actions'] # (N, 2)
+    
+    # 我们从第 500 帧开始，作为起始状态
     start_idx = 500
-    context_tokens = torch.from_numpy(all_tokens[start_idx].reshape(1, -1)).long().to(DEVICE)
-    context_tokens = context_tokens.unsqueeze(0)
+    
+    # ================= 🔴 核心修改在这里 =================
+    # 在转为 Tensor 后，必须加上 .long()，把 uint16 强转为 int64
+    context_tokens = torch.from_numpy(all_tokens[start_idx].reshape(1, -1)).long().to(DEVICE) 
+    # ===================================================
+    
+    context_tokens = context_tokens.unsqueeze(0) # (1, 1, 256) -> batch=1, seq=1, dim=256
 
     keyboard = None
     if USE_KEYBOARD:
@@ -370,46 +409,69 @@ def main():
             print(f"⚠️ Keyboard init failed: {e}. Fallback to dataset actions.")
             keyboard = None
 
+    # 预加载自动动作（用于回退）
     auto_actions = torch.from_numpy(all_actions[start_idx:start_idx + STEPS_TO_DREAM]).float().to(DEVICE)
-    auto_actions = auto_actions.unsqueeze(0)
-
+    auto_actions = auto_actions.unsqueeze(0) # (1, STEPS, 2)
+    file_actions = []
+    if USE_ACTION_FILE:
+        file_actions = load_actions_from_file(ACTIONS_FILE_PATH, STEER_SCALE, THROTTLE_SCALE)
+        if file_actions:
+            print(f"📄 Loaded {len(file_actions)} actions from {ACTIONS_FILE_PATH}")
+    
+    # 用于保存生成的图片
     generated_frames = []
-    rng = np.random.default_rng(SNOW_SEED)
-    snow_mask_static = None
-    if overlay_net is not None and SNOW_STATIC:
-        snow_mask = generate_snow_mask(IMAGE_SIZE, IMAGE_SIZE, rng)
-        snow_mask_static = torch.from_numpy(snow_mask).unsqueeze(0).unsqueeze(0).to(DEVICE)
-
-    first_frame = decode_indices(
-        vqvae,
-        all_tokens[start_idx],
-        overlay_net=overlay_net,
-        snow_mask=snow_mask_static,
-        overlay_scale=overlay_scale,
-    )
+    
+    # 先把第一帧解码出来存着
+    first_frame = decode_indices(vqvae, all_tokens[start_idx], adapter=adapter)
     frame_bgr = cv2.cvtColor(first_frame, cv2.COLOR_RGB2BGR)
     prev_smoothed = None
     if USE_TEMPORAL_SMOOTH:
         frame_bgr, prev_smoothed, _, _ = apply_temporal_smoothing(frame_bgr, prev_smoothed)
     generated_frames.append(frame_bgr)
-
+    
     print(f"🚀 Dreaming start! Context window: {BLOCK_SIZE} tokens")
+    
     stop_dream = False
     manual_repeat = 0
     manual_action_np = None
     manual_action_tensor = None
+    file_repeat = 0
+    file_action_np = None
+    file_action_tensor = None
+    file_action_idx = 0
     manual_active = False
     prev_action_np = None
     with torch.no_grad():
-        current_tokens = context_tokens
-        current_actions = auto_actions[:, 0:1, :]
-
+        current_tokens = context_tokens # (1, seq_len, 256)
+        current_actions = auto_actions[:, 0:1, :] # 取第一个动作 (1, 1, 2)
+        
         for step in range(STEPS_TO_DREAM - 1):
             t0 = time.time()
-            auto_step_action = auto_actions[:, step:step + 1, :]
+            
+            # 准备当前要生成的帧的容器
+            next_frame_tokens = []
+            
+            # 获取当前上下文的动作
+            auto_step_action = auto_actions[:, step:step+1, :] # (1, 1, 2)
             this_step_action = auto_step_action
             manual_active = False
-            if keyboard is not None:
+            if file_actions:
+                if file_repeat > 0 and file_action_tensor is not None:
+                    this_step_action = file_action_tensor
+                    manual_action_np = file_action_np
+                    manual_active = True
+                    file_repeat -= 1
+                elif file_action_idx < len(file_actions):
+                    file_action_np = file_actions[file_action_idx]
+                    file_action_tensor = torch.from_numpy(file_action_np).view(1, 1, 2).to(DEVICE)
+                    this_step_action = file_action_tensor
+                    manual_action_np = file_action_np
+                    manual_active = True
+                    file_repeat = max(KEYBOARD_REPEAT_FRAMES - 1, 0)
+                    file_action_idx += 1
+                elif not KEYBOARD_FALLBACK_TO_DATA:
+                    this_step_action = torch.zeros_like(auto_step_action)
+            elif keyboard is not None:
                 if manual_repeat > 0 and manual_action_tensor is not None:
                     this_step_action = manual_action_tensor
                     manual_active = True
@@ -440,39 +502,44 @@ def main():
                     prev_action_np = action_np.copy()
                 this_step_action = torch.from_numpy(action_np).view(1, 1, 2).to(DEVICE)
 
+            # 这里的滑动窗口逻辑
             MAX_CONTEXT_FRAMES = 3
             if current_tokens.shape[1] > MAX_CONTEXT_FRAMES:
                 current_tokens = current_tokens[:, -MAX_CONTEXT_FRAMES:, :]
                 current_actions = current_actions[:, -MAX_CONTEXT_FRAMES:, :]
-
+            
+            # 基础输入构造
             pred_tokens_so_far = torch.zeros((1, 1, 256), dtype=torch.long).to(DEVICE)
-            full_input_tokens = torch.cat([current_tokens, pred_tokens_so_far], dim=1)
-            full_input_actions = torch.cat([current_actions, this_step_action], dim=1)
-
+            
+            # 拼接 Img 和 Act
+            # 此时 current_tokens 已经是 long 类型，pred_tokens_so_far 也是 long 类型，不会报错了
+            full_input_tokens = torch.cat([current_tokens, pred_tokens_so_far], dim=1) 
+            full_input_actions = torch.cat([current_actions, this_step_action], dim=1) 
+            
             for i in range(256):
                 logits, _ = gpt(full_input_tokens, full_input_actions)
-                seq_len = current_tokens.shape[1]
+                
+                seq_len = current_tokens.shape[1] 
                 target_idx = seq_len * TOKENS_PER_FRAME + i - 1
+                
+                # 安全检查
                 if target_idx >= logits.shape[1]:
                     target_idx = logits.shape[1] - 1
+                    
                 next_token_logits = logits[:, target_idx, :]
+                
+                # 采样
                 idx = sample_next_token(next_token_logits.unsqueeze(1), temperature=TEMPERATURE, top_k=TOP_K)
+                
+                # 填入 tensor
                 full_input_tokens[0, -1, i] = idx
-
-            new_frame_tokens = full_input_tokens[:, -1:, :]
-            if overlay_net is not None and not SNOW_STATIC:
-                snow_mask = generate_snow_mask(IMAGE_SIZE, IMAGE_SIZE, rng)
-                snow_mask_t = torch.from_numpy(snow_mask).unsqueeze(0).unsqueeze(0).to(DEVICE)
-            else:
-                snow_mask_t = snow_mask_static
-
-            img_np = decode_indices(
-                vqvae,
-                new_frame_tokens.reshape(16, 16).cpu().numpy(),
-                overlay_net=overlay_net,
-                snow_mask=snow_mask_t,
-                overlay_scale=overlay_scale,
-            )
+            
+            # 一帧生成完毕！
+            new_frame_tokens = full_input_tokens[:, -1:, :] # (1, 1, 256)
+            
+            # 解码显示
+            # 注意：decode_indices 需要 numpy 格式
+            img_np = decode_indices(vqvae, new_frame_tokens.reshape(16, 16).cpu().numpy(), adapter=adapter)
             frame_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
             if USE_TEMPORAL_SMOOTH:
                 frame_bgr, prev_smoothed, diff, alpha = apply_temporal_smoothing(frame_bgr, prev_smoothed)
@@ -481,16 +548,17 @@ def main():
             if OVERLAY_WASD:
                 draw_wasd_overlay(frame_bgr, manual_action_np, manual_active)
             generated_frames.append(frame_bgr)
-
+            
+            # 更新上下文
             current_tokens = torch.cat([current_tokens, new_frame_tokens], dim=1)
             current_actions = torch.cat([current_actions, this_step_action], dim=1)
-
+            
             frame_time = time.time() - t0
             if TARGET_FPS and TARGET_FPS > 0:
                 sleep_time = max(0.0, 1.0 / TARGET_FPS - frame_time)
                 if sleep_time > 0:
                     time.sleep(sleep_time)
-            print(f"Frame {step + 1}/{STEPS_TO_DREAM} generated. Time: {frame_time:.2f}s")
+            print(f"Frame {step+1}/{STEPS_TO_DREAM} generated. Time: {frame_time:.2f}s")
 
             if stop_dream:
                 break
@@ -498,29 +566,38 @@ def main():
     if keyboard is not None:
         keyboard.close()
 
+    # 保存视频
     print("💾 Saving video (step 1: raw export)...")
     height, width, layers = generated_frames[0].shape
+    
+    # 1. 先保存为一个临时文件 (使用 mp4v，因为这是 OpenCV 支持最稳的，不容易报错)
     temp_output = "temp_dream_raw.mp4"
-    video = cv2.VideoWriter(
-        temp_output, cv2.VideoWriter_fourcc(*"mp4v"), 10, (width, height)
-    )
+    video = cv2.VideoWriter(temp_output, cv2.VideoWriter_fourcc(*'mp4v'), 10, (width, height))
+    
     for frame in generated_frames:
         video.write(frame)
     video.release()
-
+    
+    # 2. 调用 FFmpeg 自动转码 (转成 VS Code 能播的 H.264 格式)
+    # 注意：这需要你的服务器上安装了 ffmpeg (通常做深度学习环境都有)
     print("⚙️ Auto-converting to H.264 for VS Code compatibility...")
-    convert_cmd = (
-        f"ffmpeg -y -i {temp_output} -vcodec libx264 -pix_fmt yuv420p "
-        f"-loglevel error {OUTPUT_VIDEO}"
-    )
+    
+    # -y: 覆盖同名文件
+    # -vcodec libx264: 使用 H.264 编码
+    # -pix_fmt yuv420p: 确保浏览器/VSCode 兼容性
+    # -loglevel error: 少输出废话
+    convert_cmd = f"ffmpeg -y -i {temp_output} -vcodec libx264 -pix_fmt yuv420p -loglevel error {OUTPUT_VIDEO}"
+    
     exit_code = os.system(convert_cmd)
+    
     if exit_code == 0:
+        # 转码成功，删除临时文件
         if os.path.exists(temp_output):
             os.remove(temp_output)
         print(f"✅ Dream video saved to {OUTPUT_VIDEO} (VS Code 可直接播放)")
     else:
+        # 转码失败（可能没装 ffmpeg），保留原文件
         print(f"⚠️ 转码失败 (可能未安装 ffmpeg)，请下载 {temp_output} 到本地播放。")
-
 
 if __name__ == "__main__":
     main()

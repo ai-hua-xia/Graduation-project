@@ -7,3 +7,4 @@ checkpoints_*/
 *.vscode/
 *.pyc
 dataset_style/
+dataset_rich_actions/

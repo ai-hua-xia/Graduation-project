@@ -55,9 +55,10 @@ SMOOTH_LOG_EVERY = 0
 USE_ACTION_FILTER = True
 ACTION_CLAMP_STEER = 0.25
 ACTION_CLAMP_THROTTLE = 0.6
-ACTION_SMOOTH_ALPHA = 0.35
-ACTION_MAX_DELTA_STEER = 0.08
-ACTION_MAX_DELTA_THROTTLE = 0.12
+ACTION_SMOOTH_ALPHA = 0.55
+ACTION_MAX_DELTA_STEER = 0.12
+ACTION_MAX_DELTA_THROTTLE = 0.15
+INVERT_STEER_FOR_MODEL = True
 # =======================================
 
 
@@ -435,6 +436,9 @@ def main():
             if USE_ACTION_FILTER:
                 action_np = this_step_action.detach().cpu().numpy().reshape(-1)
                 action_np, prev_action_np = apply_action_filter(action_np, prev_action_np)
+                if INVERT_STEER_FOR_MODEL and manual_active:
+                    action_np[0] = -action_np[0]
+                    prev_action_np = action_np.copy()
                 this_step_action = torch.from_numpy(action_np).view(1, 1, 2).to(DEVICE)
 
             MAX_CONTEXT_FRAMES = 3

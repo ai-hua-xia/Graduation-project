@@ -3,15 +3,20 @@ import glob
 import json
 import os
 import re
+import sys
 
 import cv2
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from train_vqvae_256 import VQVAE
+# 允许从子目录直接运行
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-
+from train.train_vqvae_256 import VQVAE
+    
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Export VQ-VAE tokens for a dataset")
     parser.add_argument(
@@ -21,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--checkpoint",
-        default="checkpoints_vqvae_256/vqvae_256_ep14.pth",
+        default="checkpoints_vqvae_256/vqvae_256_ep99.pth",
         help="Path to VQ-VAE checkpoint",
     )
     parser.add_argument(
