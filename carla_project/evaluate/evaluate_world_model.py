@@ -24,6 +24,64 @@ from train.config import WM_CONFIG
 from evaluate.metrics import VideoMetrics
 
 
+def compute_stability_metrics(metrics_over_steps):
+    """
+    计算长期稳定性指标
+
+    Args:
+        metrics_over_steps: 包含每个时间步PSNR/SSIM的字典
+
+    Returns:
+        stability_metrics: 稳定性指标字典
+    """
+    psnr_values = np.array(metrics_over_steps['psnr'])
+    ssim_values = np.array(metrics_over_steps['ssim'])
+    steps = np.array(metrics_over_steps['step'])
+
+    stability = {}
+
+    # 1. 崩溃点检测（PSNR < 15 dB 认为完全崩溃）
+    collapse_threshold = 15.0
+    collapse_indices = np.where(psnr_values < collapse_threshold)[0]
+    if len(collapse_indices) > 0:
+        stability['collapse_frame'] = int(steps[collapse_indices[0]])
+    else:
+        stability['collapse_frame'] = -1  # 未崩溃
+
+    # 2. PSNR半衰期（降到初始值50%的帧数）
+    initial_psnr = psnr_values[0]
+    half_psnr = initial_psnr * 0.5
+    half_life_indices = np.where(psnr_values < half_psnr)[0]
+    if len(half_life_indices) > 0:
+        stability['psnr_half_life'] = int(steps[half_life_indices[0]])
+    else:
+        stability['psnr_half_life'] = -1  # 未达到
+
+    # 3. SSIM半衰期
+    initial_ssim = ssim_values[0]
+    half_ssim = initial_ssim * 0.5
+    ssim_half_life_indices = np.where(ssim_values < half_ssim)[0]
+    if len(ssim_half_life_indices) > 0:
+        stability['ssim_half_life'] = int(steps[ssim_half_life_indices[0]])
+    else:
+        stability['ssim_half_life'] = -1
+
+    # 4. 平均衰减率（每帧PSNR下降多少）
+    if len(psnr_values) > 1:
+        psnr_decay_rate = (psnr_values[0] - psnr_values[-1]) / len(psnr_values)
+        stability['psnr_decay_rate'] = float(psnr_decay_rate)
+    else:
+        stability['psnr_decay_rate'] = 0.0
+
+    # 5. 稳定性分数（0-100，越高越稳定）
+    # 基于PSNR方差和衰减率
+    psnr_std = np.std(psnr_values)
+    stability_score = max(0, 100 - psnr_std * 2 - abs(stability['psnr_decay_rate']) * 10)
+    stability['stability_score'] = float(stability_score)
+
+    return stability
+
+
 def load_models(vqvae_path, world_model_path, device):
     """加载模型"""
     # VQ-VAE
@@ -223,6 +281,10 @@ def evaluate_autoregressive(
     all_real_flat = all_real_frames.reshape(-1, *all_real_frames.shape[2:])
     overall_metrics = metrics_calc.compute_all_metrics(all_pred_flat, all_real_flat)
 
+    # 计算长期稳定性指标
+    stability_metrics = compute_stability_metrics(metrics_over_steps)
+    overall_metrics.update(stability_metrics)
+
     return metrics_over_steps, overall_metrics
 
 
@@ -349,6 +411,22 @@ def main():
 
     print(f"\nOverall PSNR: {ar_overall['psnr']:.2f} dB")
     print(f"Overall SSIM: {ar_overall['ssim']:.4f}")
+
+    # 显示稳定性指标
+    print("\nLong-term Stability Metrics:")
+    if ar_overall['collapse_frame'] > 0:
+        print(f"  Collapse Frame: {ar_overall['collapse_frame']} (PSNR < 15 dB)")
+    else:
+        print(f"  Collapse Frame: Not collapsed within {args.sequence_length} frames")
+
+    if ar_overall['psnr_half_life'] > 0:
+        print(f"  PSNR Half-Life: {ar_overall['psnr_half_life']} frames")
+    else:
+        print(f"  PSNR Half-Life: > {args.sequence_length} frames")
+
+    print(f"  PSNR Decay Rate: {ar_overall['psnr_decay_rate']:.4f} dB/frame")
+    print(f"  Stability Score: {ar_overall['stability_score']:.1f}/100")
+
     print("\nPSNR degradation over time:")
     for i in range(0, len(metrics_over_steps['step']), 10):
         step = metrics_over_steps['step'][i]
@@ -388,6 +466,12 @@ def main():
     print(f"PSNR at step 0: {metrics_over_steps['psnr'][0]:.2f} dB")
     print(f"PSNR at step {args.sequence_length-1}: {metrics_over_steps['psnr'][-1]:.2f} dB")
     print(f"PSNR degradation: {metrics_over_steps['psnr'][0] - metrics_over_steps['psnr'][-1]:.2f} dB")
+    print(f"\nStability:")
+    if ar_overall['collapse_frame'] > 0:
+        print(f"  Collapsed at frame {ar_overall['collapse_frame']}")
+    else:
+        print(f"  No collapse (stable for {args.sequence_length} frames)")
+    print(f"  Stability Score: {ar_overall['stability_score']:.1f}/100")
 
 
 if __name__ == '__main__':

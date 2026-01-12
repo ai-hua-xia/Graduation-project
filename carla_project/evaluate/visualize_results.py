@@ -19,6 +19,7 @@ def plot_metrics_over_time(results: dict, output_dir: Path):
         return
 
     over_steps = results['autoregressive']['over_steps']
+    ar_overall = results['autoregressive']['overall']
     steps = over_steps['step']
     psnr = over_steps['psnr']
     ssim = over_steps['ssim']
@@ -33,6 +34,17 @@ def plot_metrics_over_time(results: dict, output_dir: Path):
     axes[0].grid(True, alpha=0.3)
     axes[0].axhline(y=psnr[0], color='g', linestyle='--', alpha=0.5, label=f'Initial: {psnr[0]:.1f}')
     axes[0].axhline(y=psnr[-1], color='r', linestyle='--', alpha=0.5, label=f'Final: {psnr[-1]:.1f}')
+
+    # 标记崩溃点
+    if ar_overall.get('collapse_frame', -1) > 0:
+        collapse_frame = ar_overall['collapse_frame']
+        axes[0].axvline(x=collapse_frame, color='red', linestyle=':', linewidth=2, label=f'Collapse: {collapse_frame}')
+
+    # 标记半衰期
+    if ar_overall.get('psnr_half_life', -1) > 0:
+        half_life = ar_overall['psnr_half_life']
+        axes[0].axvline(x=half_life, color='orange', linestyle=':', linewidth=2, label=f'Half-life: {half_life}')
+
     axes[0].legend()
 
     # SSIM
@@ -100,7 +112,7 @@ def plot_comparison_bar(results: dict, output_dir: Path):
 def plot_summary_table(results: dict, output_dir: Path):
     """生成汇总表格图"""
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(10, 8))
     ax.axis('off')
 
     # 准备数据
@@ -124,8 +136,24 @@ def plot_summary_table(results: dict, output_dir: Path):
                          f"{ar.get('lpips', 0):.4f}",
                          f"{ar.get('lpips', 0) - single.get('lpips', 0):.4f}"])
 
+        # 添加稳定性指标
+        data.append(['', '', '', ''])  # 空行
+        if ar.get('collapse_frame', -1) > 0:
+            data.append(['Collapse Frame', '-', f"{ar['collapse_frame']}", '-'])
+        else:
+            data.append(['Collapse Frame', '-', 'No collapse', '-'])
+
+        if ar.get('psnr_half_life', -1) > 0:
+            data.append(['PSNR Half-Life', '-', f"{ar['psnr_half_life']} frames", '-'])
+        else:
+            data.append(['PSNR Half-Life', '-', '> sequence length', '-'])
+
+        data.append(['PSNR Decay Rate', '-', f"{ar.get('psnr_decay_rate', 0):.4f} dB/frame", '-'])
+        data.append(['Stability Score', '-', f"{ar.get('stability_score', 0):.1f}/100", '-'])
+
     if 'action_consistency' in results:
         ac = results['action_consistency']
+        data.append(['', '', '', ''])  # 空行
         data.append(['Action Sensitivity', f"{ac['action_sensitivity_mean']:.4f}", '-', '-'])
 
     # 创建表格
@@ -138,8 +166,8 @@ def plot_summary_table(results: dict, output_dir: Path):
     )
 
     table.auto_set_font_size(False)
-    table.set_fontsize(11)
-    table.scale(1.2, 1.8)
+    table.set_fontsize(10)
+    table.scale(1.2, 1.5)
 
     # 设置标题
     ax.set_title('World Model Evaluation Summary', fontsize=16, fontweight='bold', pad=20)
