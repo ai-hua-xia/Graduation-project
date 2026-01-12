@@ -1,0 +1,76 @@
+# CARLA项目 - Git忽略文件
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 数据文件
+data/
+*.npz
+*.npy
+*.h5
+*.hdf5
+
+# 模型权重
+checkpoints/
+*.pth
+*.pt
+*.ckpt
+
+# 视频和图像（保留outputs和figures用于展示）
+!outputs/
+!figures/
+# 但排除其他位置的媒体文件
+*.mp4
+*.avi
+# 在outputs和figures中允许这些文件
+!outputs/*.mp4
+!outputs/*.png
+!outputs/*.jpg
+!figures/*.png
+!figures/*.jpg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志
+logs/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 环境
+.env
+venv/
+env/
+ENV/
+
+CARLA_0.9.16/

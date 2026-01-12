@@ -1,10 +1,41 @@
+# 数据集
 dataset_v2_complex/
-checkpoints_*/
-*.mp4
-*.avi
-*.npz
-*.npy
-*.vscode/
-*.pyc
 dataset_style/
 dataset_rich_actions/
+
+# 检查点
+checkpoints/
+checkpoints_*/
+
+# 日志
+logs/
+*.log
+
+# Python缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 媒体文件
+*.mp4
+*.avi
+
+# 数据文件
+*.npz
+*.npy
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CARLA
+CARLA_0.9.16/
+
+# 临时文件
+*.tmp
+*.bak

@@ -1,0 +1,40 @@
+# CARLA World Model - Python Dependencies
+
+# ============= CARLA =============
+carla==0.9.15  # CARLA Python API（需要与服务器版本匹配）
+
+# ============= Deep Learning =============
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# ============= Computer Vision =============
+opencv-python>=4.8.0
+Pillow>=10.0.0
+imageio>=2.31.0
+imageio-ffmpeg>=0.4.9
+
+# ============= Data Processing =============
+numpy>=1.24.0
+scipy>=1.11.0
+h5py>=3.9.0
+
+# ============= Visualization =============
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tqdm>=4.66.0
+
+# ============= Utilities =============
+pyyaml>=6.0
+psutil>=5.9.0
+argparse
+
+# ============= Optional (for analysis) =============
+# tensorboard>=2.14.0  # 训练可视化
+# wandb>=0.15.0        # 实验跟踪
+# lpips>=0.1.4         # 感知损失
+
+# ============= Development =============
+# pytest>=7.4.0
+# black>=23.0.0
+# flake8>=6.1.0
