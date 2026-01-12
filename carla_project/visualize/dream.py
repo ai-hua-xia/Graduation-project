@@ -11,7 +11,7 @@ import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from models.vqvae import VQVAE
+from models.vqvae_v2 import VQVAE_V2
 from models.world_model import WorldModel
 from train.config import WM_CONFIG
 
@@ -53,10 +53,12 @@ def generate_video(vqvae, world_model, initial_frames, actions, device, output_p
             action_window = torch.from_numpy(action_window).float().to(device)
 
             # 预测下一帧
+            # 使用较低温度和top-k采样减少随机性，提高稳定性
             next_tokens = world_model.predict_next_frame(
                 token_buffer,
                 action_window,
-                temperature=1.0,
+                temperature=0.7,  # 降低温度，减少随机性
+                top_k=50,  # top-k采样，过滤低概率token
             )  # (1, H, W)
 
             # 解码为图像
@@ -112,8 +114,8 @@ def generate_video(vqvae, world_model, initial_frames, actions, device, output_p
 
 def load_models(vqvae_path, world_model_path, device):
     """加载模型"""
-    # VQ-VAE
-    vqvae = VQVAE().to(device)
+    # VQ-VAE v2
+    vqvae = VQVAE_V2().to(device)
     checkpoint = torch.load(vqvae_path, map_location=device)
     vqvae.load_state_dict(checkpoint['model_state_dict'])
 

@@ -11,7 +11,7 @@ import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from models.vqvae import VQVAE
+from models.vqvae_v2 import VQVAE_V2
 from models.world_model import WorldModel
 from train.config import WM_CONFIG
 
@@ -135,7 +135,7 @@ def main():
 
     # 加载模型
     print("\nLoading models...")
-    vqvae = VQVAE().to(device)
+    vqvae = VQVAE_V2().to(device)
     checkpoint = torch.load(args.vqvae_checkpoint, map_location=device, weights_only=False)
     vqvae.load_state_dict(checkpoint['model_state_dict'])
 

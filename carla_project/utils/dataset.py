@@ -124,3 +124,57 @@ def get_world_model_dataloader(token_file, batch_size, context_frames=4, num_wor
         drop_last=True,
     )
     return dataloader
+
+
+class CARLALongSequenceDataset(Dataset):
+    """CARLA长序列数据集（用于Scheduled Sampling训练）"""
+    def __init__(self, token_file, seq_len=16):
+        """
+        Args:
+            token_file: .npz文件路径（包含tokens和actions）
+            seq_len: 序列长度
+        """
+        self.seq_len = seq_len
+
+        # 加载数据
+        data = np.load(token_file)
+        self.tokens = data['tokens']  # (N, H, W)
+        self.actions = data['actions']  # (N, action_dim)
+
+        print(f"Loaded {len(self.tokens)} frames for sequence training")
+        print(f"Token shape: {self.tokens.shape}")
+        print(f"Action shape: {self.actions.shape}")
+
+        # 计算有效样本数（确保能取到完整序列）
+        self.valid_indices = len(self.tokens) - seq_len
+
+    def __len__(self):
+        return self.valid_indices
+
+    def __getitem__(self, idx):
+        """
+        返回:
+            tokens: (seq_len, H, W) - 连续的token序列
+            actions: (seq_len, action_dim) - 对应的动作序列
+        """
+        tokens = self.tokens[idx:idx + self.seq_len]
+        actions = self.actions[idx:idx + self.seq_len]
+
+        return {
+            'tokens': torch.from_numpy(tokens).long(),
+            'actions': torch.from_numpy(actions).float(),
+        }
+
+
+def get_world_model_sequence_dataloader(token_file, batch_size, seq_len=16, num_workers=8):
+    """获取World Model序列数据加载器（用于Scheduled Sampling）"""
+    dataset = CARLALongSequenceDataset(token_file, seq_len)
+    dataloader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=True,
+    )
+    return dataloader
