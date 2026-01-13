@@ -25,7 +25,7 @@ carla_project/
 │   └── world_model_ss/ # World Model (SS)
 │
 ├── collect/            # 数据采集
-│   ├── collect_large.py
+│   ├── collect_data.py
 │   └── utils.py
 │
 ├── data/               # 数据集
@@ -82,7 +82,7 @@ carla_project/
 - `train/config.py` - 训练配置
 
 ### 数据处理
-- `collect/collect_large.py` - 大规模数据采集
+- `collect/collect_data.py` - 大规模数据采集
 - `utils/export_tokens_v2.py` - 导出VQ-VAE tokens
 - `utils/dataset.py` - 数据集类
 

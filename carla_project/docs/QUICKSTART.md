@@ -41,7 +41,7 @@ bash carla_project/script/run_pipeline.sh
 
 #### Step 1: 数据采集
 ```bash
-python carla_project/collect/collect_large.py
+python carla_project/collect/collect_data.py
 ```
 
 输出：`carla_project/data/raw/`
