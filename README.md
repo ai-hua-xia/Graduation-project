@@ -1,114 +1,253 @@
-# Graduation-project
-本科毕设：世界模型（MetaDrive + VQ‑VAE + Transformer + Adapter）
+# 本科毕设：基于世界模型的自动驾驶场景预测
 
-## 项目概览
-目标：用动作条件的世界模型在 MetaDrive 场景里实时“想象”未来画面。
-核心思路：VQ‑VAE 压缩成离散 token → Transformer 预测未来 token → 解码成图像；
-风格由 Adapter/Decoder 控制（夜晚/雾/雪）。
+使用VQ-VAE和Transformer构建世界模型，在驾驶模拟器中实现基于动作的未来场景预测。
 
-## 流程（从数据到视频）
-1) 数据采集
-- 脚本：`collect_data.py`
-- 输出：`dataset_v2_complex/images/*.png` + `dataset_v2_complex/actions.npy`
+## 🎯 项目概述
 
-2) 训练 VQ‑VAE（视觉压缩）
-- 脚本：`train/train_vqvae_256.py`
-- 输出：`checkpoints_vqvae_256/vqvae_256_epXX.pth`
+本项目实现了两个完整的世界模型系统：
+1. **MetaDrive项目**：支持风格迁移（夜晚/雾/雪）的世界模型
+2. **CARLA项目**：大规模Transformer世界模型（238M参数）+ WASD键盘控制
 
-3) 导出 token + action（对齐）
-- 脚本：`export_vqvae_tokens.py`
-- 输出：`dataset_v2_complex/tokens_actions_vqvae_16x16.npz`
-- 说明：包含 `tokens/actions/indices`，用 `indices` 保证与动作序列对齐
+**核心技术**：VQ-VAE离散化压缩 → Transformer预测未来token → 解码生成图像
 
-4) 训练世界模型（动作条件）
-- 脚本：`train/train_world_model.py`
-- 输出：`checkpoints_world_model/world_model_epXX.pth`
+## 📁 项目结构
 
-5) 训练风格 Adapter/Decoder（可选）
-- 夜晚/雾：`train/train_adapter.py`
-- 雪：`train/train_snow_decoder_noise.py` / `train/train_snow_decoder_noise_hr.py`
-- 输出：`checkpoints_adapter/...`
+```
+bishe/
+├── MetaDrive/              # MetaDrive世界模型（风格迁移）
+│   ├── collect_data.py    # 数据采集
+│   ├── train/             # 训练脚本
+│   ├── utils/             # 可视化工具
+│   └── web/               # Web演示
+│
+├── carla_project/          # CARLA世界模型（大规模+WASD控制）⭐ 主要项目
+│   ├── models/            # 模型定义
+│   ├── train/             # 训练脚本
+│   ├── evaluate/          # 评估系统
+│   ├── visualize/         # 可视化工具
+│   ├── checkpoints/       # ✅ 已训练模型
+│   ├── data/              # ✅ 数据集
+│   ├── docs/              # 📚 完整文档
+│   └── script/            # 便捷脚本
+│
+└── README.md              # 本文档
+```
 
-6) 生成 Dream 视频
-- 标准：`utils/visualize_dream.py`
-- 雪：`utils/visualize_dream_snow_noise.py` / `utils/visualize_dream_snow_noise_hr.py`
-- 输出：`dream_result.mp4`（H.264）
+## 🚀 快速开始
 
-## 快速开始（示例命令）
+### CARLA项目（推荐）
+
+**所有模型已训练完成，可直接使用！**
+
+#### 1. 生成视频
 ```bash
-# 1) 采集数据
+cd carla_project
+
+# 使用WASD控制生成视频
+cat > my_drive.txt << 'EOF'
+W
+W
+A
+D
+N
+EOF
+
+python visualize/dream.py \
+    --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+    --world-model-checkpoint checkpoints/world_model_v2/best.pth \
+    --token-file data/tokens_v2/tokens_actions.npz \
+    --action-txt my_drive.txt \
+    --output my_video.mp4
+```
+
+#### 2. 评估模型
+```bash
+python evaluate/evaluate_world_model.py \
+    --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+    --world-model-checkpoint checkpoints/world_model_v2/best.pth \
+    --token-file data/tokens_v2/tokens_actions.npz \
+    --output evaluation_results.json
+```
+
+#### 3. 查看文档
+```bash
+# 查看完整文档
+cat carla_project/docs/README.md
+
+# 快速开始指南
+cat carla_project/docs/QUICKSTART.md
+
+# WASD控制说明
+cat carla_project/docs/WASD.md
+```
+
+### MetaDrive项目
+
+#### 1. 数据采集
+```bash
+cd MetaDrive
 python collect_data.py
+```
 
-# 2) 训练 VQ-VAE
+#### 2. 训练VQ-VAE
+```bash
 python train/train_vqvae_256.py
+```
 
-# 3) 导出 token
+#### 3. 训练世界模型
+```bash
 python export_vqvae_tokens.py --checkpoint checkpoints_vqvae_256/vqvae_256_epXX.pth
-
-# 4) 训练世界模型
 python train/train_world_model.py
+```
 
-# 5) 生成 Dream 视频
+#### 4. 生成视频
+```bash
 python utils/visualize_dream.py
 ```
 
-## 动作控制方式（生成视频时）
-优先级：动作文件 > 键盘 > 数据集动作
-- 数据集动作：默认读取 `dataset_v2_complex/actions.npy`
-- 键盘输入：`USE_KEYBOARD = True`，`KEYBOARD_BACKEND = "terminal"`，W/A/S/D + Space + Q
-- 动作文件：在根目录写 `action.txt`，每行一个动作（`w/a/s/d/space`）
-  - 配置：`USE_ACTION_FILE = True`，`ACTIONS_FILE_PATH = "action.txt"`
-
-## Web 展示
+#### 5. Web演示
 ```bash
 cd web
 python -m http.server 8000
-```
-打开浏览器访问 `http://localhost:8000`，先上传 reality + night/fog/snow 三个视频，然后用按钮切换风格。
-
-## 目录结构
-```
-bishe/
-  collect_data.py
-  export_vqvae_tokens.py
-  train/
-    train_vqvae_256.py
-    train_world_model.py
-    train_adapter.py
-    train_snow_decoder_noise.py
-    train_snow_decoder_noise_hr.py
-  utils/
-    visualize_dream.py
-    visualize_dream_snow_noise.py
-    visualize_dream_snow_noise_hr.py
-  dataset_v2_complex/
-    images/
-    actions.npy
-    tokens_actions_vqvae_16x16.npz
-    tokens_actions_vqvae_16x16.json
-  dataset_style/
-  checkpoints_vqvae_256/
-  checkpoints_world_model/
-  checkpoints_adapter/
-  web/
+# 访问 http://localhost:8000
 ```
 
-## 不重训也能做的工作（对毕设有帮助）
-1) 实验与图表（只用现有结果）
-- 对比图：VAE vs VQ‑VAE 重建、无风格 vs 有风格、不同风格效果
-- 时间稳定性：计算相邻帧 SSIM/LPIPS 曲线，展示抖动程度
-- 统计表：FPS、分辨率、参数量、生成时延
+## 📊 项目对比
 
-2) 可视化与演示包装
-- 网页 Demo（已完成）：上传三种风格视频，一键切换
-- 录制对比视频：左现实、右想象，中间风格切换
-- 固化实验配置表（epoch/temperature/top‑k 等）
+| 特性 | MetaDrive项目 | CARLA项目 |
+|------|--------------|-----------|
+| **模拟器** | MetaDrive | CARLA 0.9.15 |
+| **数据规模** | 中等 | 10,000帧 |
+| **模型规模** | 小型 | 238M参数 |
+| **特色功能** | 风格迁移（夜晚/雾/雪） | WASD键盘控制 |
+| **训练状态** | 部分完成 | ✅ 全部完成 |
+| **评估系统** | 基础 | 完整（PSNR/SSIM/稳定性） |
+| **文档** | 基础 | 完整 |
+| **推荐用途** | 风格迁移实验 | 主要研究和论文 |
 
-3) 代码与工程化完善
-- 增加命令行参数（统一配置入口）
-- 输出日志与自动截图（便于论文写作）
-- 增加异常提示（比如动作文件为空/视频编码不兼容）
+## 🎓 CARLA项目亮点（推荐用于毕设）
 
-## 说明
-- 生成视频动作默认来自真实采集，不是随机动作。
-- `tokens_actions_vqvae_16x16.npz` 通过 `indices` 对齐，避免缺帧导致动作错位。
+### 1. 完整的训练流程
+- ✅ VQ-VAE v2: Epoch 99, Loss 0.0018
+- ✅ World Model (TF): Epoch 149, Loss 0.138
+- ✅ World Model (SS): Epoch 2, Loss 0.050
+
+### 2. 创新功能
+- **WASD键盘控制**：支持7个按键（W/A/S/D/Q/E/N）
+- **Scheduled Sampling**：缓解误差累积
+- **完整评估系统**：单步预测、自回归生成、稳定性指标
+
+### 3. 完善的文档
+- 项目主文档（README.md）
+- 快速开始指南（QUICKSTART.md）
+- 环境配置（SETUP.md）
+- WASD控制（WASD.md）
+- 变更日志（CHANGELOG.md）
+
+### 4. 便捷的脚本
+- 一键训练流程
+- 快速评估
+- WASD测试
+- 对比视频生成
+
+## 💡 毕设建议
+
+### 主要使用CARLA项目
+1. **模型已训练完成**，可直接进行实验
+2. **评估系统完整**，便于生成论文数据
+3. **文档完善**，便于撰写论文
+4. **创新点明确**：WASD控制、Scheduled Sampling
+
+### 可以做的工作
+
+#### 1. 实验与分析
+- 对比Teacher Forcing vs Scheduled Sampling
+- 分析长期生成的稳定性（崩溃点、半衰期）
+- 不同动作序列的生成质量对比
+- WASD控制的实用性验证
+
+#### 2. 可视化与演示
+- 生成多种驾驶场景视频
+- 制作对比视频（真实 vs 预测）
+- 展示WASD交互式控制
+- 绘制评估指标图表
+
+#### 3. 论文撰写
+- 使用完整的评估数据
+- 引用CARLA项目的技术细节
+- 展示创新点（WASD控制、SS训练）
+- 使用生成的可视化结果
+
+#### 4. 可选：MetaDrive风格迁移
+- 作为补充实验
+- 展示模型的扩展性
+- 对比不同模拟器的效果
+
+## 📚 详细文档
+
+### CARLA项目文档
+- **主文档**: `carla_project/docs/README.md`
+- **快速开始**: `carla_project/docs/QUICKSTART.md`
+- **环境配置**: `carla_project/docs/SETUP.md`
+- **WASD控制**: `carla_project/docs/WASD.md`
+- **变更日志**: `carla_project/docs/CHANGELOG.md`
+
+### MetaDrive项目
+- 参考各脚本中的注释
+- Web演示：`MetaDrive/web/`
+
+## 🔧 环境要求
+
+### CARLA项目
+- Ubuntu 20.04/22.04
+- NVIDIA GPU (16GB+ 显存)
+- Python 3.8+
+- PyTorch 2.0+
+- CUDA 11.8+
+- CARLA 0.9.15
+
+### MetaDrive项目
+- Python 3.8+
+- PyTorch
+- MetaDrive模拟器
+
+## 📈 项目状态
+
+### CARLA项目 ✅
+- [x] 数据采集（10,000帧）
+- [x] VQ-VAE v2训练
+- [x] World Model训练（TF + SS）
+- [x] 评估系统实现
+- [x] WASD控制实现
+- [x] 文档完善
+- [x] 脚本工具
+
+### MetaDrive项目 🔄
+- [x] 基础流程
+- [x] 风格迁移
+- [x] Web演示
+- [ ] 完整评估
+- [ ] 文档完善
+
+## 🎯 推荐使用流程
+
+1. **主要使用CARLA项目**进行研究和论文撰写
+2. **参考MetaDrive项目**的风格迁移作为补充
+3. 重点展示CARLA项目的创新点和完整性
+4. 使用CARLA项目的评估数据和可视化结果
+
+## 📝 引用
+
+```
+[待补充]
+```
+
+## 📄 许可
+
+[待补充]
+
+---
+
+**推荐**: 优先使用 `carla_project/`，模型已训练完成，文档完善，适合毕设！
+
+**最后更新**: 2026-01-13

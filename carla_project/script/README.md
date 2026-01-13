@@ -65,6 +65,20 @@ bash carla_project/script/quick_eval.sh \
 bash carla_project/script/start_carla_server.sh
 ```
 
+### 5. `test_wasd.sh` - 测试WASD动作生成
+测试WASD动作映射和视频生成功能。
+
+```bash
+bash carla_project/script/test_wasd.sh
+```
+
+### 6. `quick_start.sh` - WASD快速开始指南
+显示WASD动作生成的快速使用指南。
+
+```bash
+bash carla_project/script/quick_start.sh
+```
+
 ## 使用建议
 
 ### 首次运行

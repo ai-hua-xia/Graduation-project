@@ -16,6 +16,110 @@ from models.world_model import WorldModel
 from train.config import WM_CONFIG
 
 
+def wasd_to_action(key):
+    """
+    将WASD按键转换为动作向量（基于训练数据分布优化）
+
+    训练数据统计：
+    - Steering: [-0.6, 0.6], 均值0.006, 53%在[-0.2, 0.2]
+    - Throttle: [0.4, 0.7], 均值0.549, 无刹车数据
+
+    Args:
+        key: 按键字符 ('W', 'A', 'S', 'D', 'N')
+
+    Returns:
+        action: [steering, throttle]
+    """
+    # 默认：直行 + 中等油门
+    steering = 0.0
+    throttle = 0.55
+
+    key = key.upper()
+
+    if key == 'W':  # 加速
+        steering = 0.0
+        throttle = 0.65  # 训练数据上限附近
+    elif key == 'S':  # 减速（不是刹车！训练数据无刹车）
+        steering = 0.0
+        throttle = 0.42  # 训练数据下限附近
+    elif key == 'A':  # 左转
+        steering = -0.4  # 训练数据常见范围
+        throttle = 0.55
+    elif key == 'D':  # 右转
+        steering = 0.4   # 训练数据常见范围
+        throttle = 0.55
+    elif key == 'Q':  # 左转+加速
+        steering = -0.4
+        throttle = 0.65
+    elif key == 'E':  # 右转+加速
+        steering = 0.4
+        throttle = 0.65
+    elif key == 'N':  # 空档（保持直行）
+        steering = 0.0
+        throttle = 0.55
+    else:
+        # 未知按键，返回默认
+        pass
+
+    return np.array([steering, throttle], dtype=np.float32)
+
+
+def load_actions_from_txt(txt_path):
+    """
+    从文本文件加载动作序列
+
+    支持两种格式：
+    1. WASD格式（每行一个字母）：
+       W
+       W
+       A
+       D
+       S
+
+    2. 数值格式（每行两个数字：steering throttle）：
+       0.0 0.65
+       0.0 0.65
+       -0.4 0.55
+       0.4 0.55
+       0.0 0.42
+
+    Args:
+        txt_path: 文本文件路径
+
+    Returns:
+        actions: numpy数组 (N, 2)
+    """
+    actions = []
+
+    with open(txt_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):  # 跳过空行和注释
+                continue
+
+            # 尝试解析为WASD
+            if len(line) == 1 and line.upper() in 'WASDQEN':
+                action = wasd_to_action(line)
+                actions.append(action)
+            else:
+                # 尝试解析为数值
+                try:
+                    parts = line.split()
+                    if len(parts) == 2:
+                        steering = float(parts[0])
+                        throttle = float(parts[1])
+                        actions.append([steering, throttle])
+                    else:
+                        print(f"Warning: 跳过无效行: {line}")
+                except ValueError:
+                    print(f"Warning: 跳过无效行: {line}")
+
+    if len(actions) == 0:
+        raise ValueError(f"未能从 {txt_path} 中解析出任何动作")
+
+    return np.array(actions, dtype=np.float32)
+
+
 def generate_video(vqvae, world_model, initial_frames, actions, device, output_path):
     """
     生成视频
@@ -152,7 +256,9 @@ def main():
     parser.add_argument('--num-frames', type=int, default=300,
                         help='Number of frames to generate')
     parser.add_argument('--action-file', type=str, default=None,
-                        help='Action file (if not provided, use from token file)')
+                        help='Action file (.npy or .txt, if not provided, use from token file)')
+    parser.add_argument('--action-txt', type=str, default=None,
+                        help='Action text file (WASD or numeric format)')
     parser.add_argument('--device', type=str, default='cuda',
                         help='Device to use')
 
@@ -180,13 +286,24 @@ def main():
     # 使用前context_frames作为初始帧
     initial_frames = tokens[:context_frames]
 
-    # 动作序列
-    if args.action_file:
-        # 从文件加载动作
+    # 动作序列（优先级：action-txt > action-file > token file）
+    if args.action_txt:
+        # 从文本文件加载动作（支持WASD和数值格式）
+        print(f"Loading actions from text file: {args.action_txt}")
+        actions = load_actions_from_txt(args.action_txt)
+        print(f"Loaded {len(actions)} actions from text file")
+    elif args.action_file:
+        # 从.npy文件加载动作
+        print(f"Loading actions from .npy file: {args.action_file}")
         actions = np.load(args.action_file)
     else:
         # 使用数据集中的动作
         actions = actions[context_frames:context_frames + args.num_frames]
+
+    # 如果动作数量超过num_frames，截断
+    if len(actions) > args.num_frames:
+        actions = actions[:args.num_frames]
+        print(f"Truncated actions to {args.num_frames} frames")
 
     print(f"Initial frames shape: {initial_frames.shape}")
     print(f"Actions shape: {actions.shape}")
