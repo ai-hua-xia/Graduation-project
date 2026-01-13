@@ -16,15 +16,17 @@ Commands:
   status              - 查看训练进度
   eval                - 快速评估模型
   diagnose            - 诊断模型问题
-  video <frames>      - 生成预测视频
+  video <frames> [start_idx] - 生成预测视频
   analyze             - 分析视频质量
   figures             - 生成论文图表
 
 Examples:
   $0 status           # 查看训练进度
   $0 eval             # 评估当前模型
-  $0 video 30         # 生成30帧视频
-  $0 video 150        # 生成150帧视频
+  $0 video 30         # 生成30帧视频（随机场景）
+  $0 video 150        # 生成150帧视频（随机场景）
+  $0 video 30 1000    # 生成30帧视频（固定从第1000帧开始）
+  $0 video 150 5000   # 生成150帧视频（固定从第5000帧开始）
   $0 diagnose         # 诊断模型问题
   $0 analyze          # 分析视频质量衰减
   $0 figures          # 生成所有图表
@@ -123,6 +125,7 @@ cmd_diagnose() {
 
 cmd_video() {
     local frames=${1:-30}
+    local start_idx=${2:-""}
     local output_name="demo_${frames}frames"
 
     echo "=========================================="
@@ -131,19 +134,38 @@ cmd_video() {
     echo ""
     echo "Frames: $frames"
     echo "Duration: ~$((frames / 10))s"
+    if [ -n "$start_idx" ]; then
+        echo "Start index: $start_idx (fixed scene)"
+        output_name="demo_${frames}frames_idx${start_idx}"
+    else
+        echo "Start index: random"
+    fi
     echo ""
 
     mkdir -p outputs/videos
 
-    python utils/generate_videos.py \
-        --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
-        --world-model-checkpoint checkpoints/world_model_ss/best.pth \
-        --token-file data/tokens_v2/tokens_actions.npz \
-        --output-dir outputs/videos \
-        --num-videos 1 \
-        --num-frames "$frames" \
-        --fps 10 \
-        --temperature 1.0
+    if [ -n "$start_idx" ]; then
+        python utils/generate_videos.py \
+            --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+            --world-model-checkpoint checkpoints/world_model_ss/best.pth \
+            --token-file data/tokens_v2/tokens_actions.npz \
+            --output-dir outputs/videos \
+            --num-videos 1 \
+            --num-frames "$frames" \
+            --fps 10 \
+            --temperature 1.0 \
+            --start-idx "$start_idx"
+    else
+        python utils/generate_videos.py \
+            --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+            --world-model-checkpoint checkpoints/world_model_ss/best.pth \
+            --token-file data/tokens_v2/tokens_actions.npz \
+            --output-dir outputs/videos \
+            --num-videos 1 \
+            --num-frames "$frames" \
+            --fps 10 \
+            --temperature 1.0
+    fi
 
     if [ -f "outputs/videos/prediction_01.mp4" ]; then
         mv outputs/videos/prediction_01.mp4 "outputs/videos/${output_name}.mp4"
@@ -194,7 +216,7 @@ case "${1:-}" in
         cmd_diagnose
         ;;
     video)
-        cmd_video "${2:-30}"
+        cmd_video "${2:-30}" "${3:-}"
         ;;
     analyze)
         cmd_analyze

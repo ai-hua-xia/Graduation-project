@@ -250,6 +250,8 @@ def main():
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--temperature', type=float, default=1.0,
                        help='Sampling temperature (0 for greedy)')
+    parser.add_argument('--start-idx', type=int, default=None,
+                       help='Fixed start index (default: random)')
 
     args = parser.parse_args()
 
@@ -284,9 +286,25 @@ def main():
     print(f"Generating {args.num_videos} videos...")
     print()
 
-    for i in range(args.num_videos):
+    # 确定起始位置
+    if args.start_idx is not None:
+        # 使用固定起始位置
+        if args.start_idx < 0 or args.start_idx > max_start_idx:
+            print(f"Warning: start_idx {args.start_idx} out of range [0, {max_start_idx}]")
+            print(f"Using random start index instead")
+            start_indices = [np.random.randint(0, max_start_idx) for _ in range(args.num_videos)]
+        else:
+            # 所有视频使用相同的起始位置
+            start_indices = [args.start_idx] * args.num_videos
+            print(f"Using fixed start index: {args.start_idx}")
+    else:
         # 随机选择起始位置
-        start_idx = np.random.randint(0, max_start_idx)
+        start_indices = [np.random.randint(0, max_start_idx) for _ in range(args.num_videos)]
+        print(f"Using random start indices")
+    print()
+
+    for i in range(args.num_videos):
+        start_idx = start_indices[i]
 
         print(f"Video {i+1}/{args.num_videos} (starting from frame {start_idx})...")
 

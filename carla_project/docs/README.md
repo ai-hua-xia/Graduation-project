@@ -36,11 +36,11 @@
 # 快速评估模型
 ./bin/model_tools.sh eval
 
-# 生成30帧视频
+# 生成30帧视频（随机场景）
 ./bin/model_tools.sh video 30
 
-# 生成150帧视频
-./bin/model_tools.sh video 150
+# 生成150帧视频（固定场景，连续性好）
+./bin/model_tools.sh video 150 5000
 
 # 诊断模型问题
 ./bin/model_tools.sh diagnose
@@ -52,10 +52,13 @@
 ./bin/model_tools.sh figures
 ```
 
+**提示**: 使用固定起始位置（如 `video 150 5000`）可以保持场景连续性，观感更好。
+
 ### 直接使用Python脚本
 
 #### 方式1: 生成预测视频
 ```bash
+# 随机场景
 python utils/generate_videos.py \
     --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
     --world-model-checkpoint checkpoints/world_model_ss/best.pth \
@@ -64,6 +67,17 @@ python utils/generate_videos.py \
     --num-videos 1 \
     --num-frames 30 \
     --fps 10
+
+# 固定场景（推荐）
+python utils/generate_videos.py \
+    --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+    --world-model-checkpoint checkpoints/world_model_ss/best.pth \
+    --token-file data/tokens_v2/tokens_actions.npz \
+    --output-dir outputs/videos \
+    --num-videos 1 \
+    --num-frames 150 \
+    --fps 10 \
+    --start-idx 5000
 ```
 
 #### 方式2: 评估模型
