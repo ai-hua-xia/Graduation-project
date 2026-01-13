@@ -2,10 +2,18 @@
 
 ## 2026-01-13
 
+### ✅ 脚本整理
+- 精简 bin/ 脚本从12个减少到6个
+- 删除冗余脚本（quick_test, quick_eval, check_training, run_pipeline, start_training, quick_start）
+- 统一入口：model_tools.sh 提供6个子命令（status, eval, diagnose, video, analyze, figures）
+- 三层架构：bin/（Shell脚本）→ tools/（分析工具）→ utils/（核心库）
+- 统一输出目录：outputs/（evaluations, videos, analysis, figures）
+
 ### ✅ 项目整理
 - 精简文档从11个减少到6个
 - 删除冗余文档（CLEANUP_GUIDE, COMPARISON, STATUS, WASD_SUMMARY）
 - 创建简洁的主文档结构
+- 更新 README.md 和 PROJECT_STRUCTURE.md
 
 ### ✅ WASD动作控制
 - 实现WASD按键到动作的映射

@@ -27,67 +27,55 @@
 
 ## 🚀 快速开始
 
-### 生成视频（使用已训练模型）
+### 使用统一工具脚本
 
-#### 方式1: 使用数据集中的动作
 ```bash
-python carla_project/visualize/dream.py \
-    --vqvae-checkpoint carla_project/checkpoints/vqvae_v2/best.pth \
-    --world-model-checkpoint carla_project/checkpoints/world_model_v2/best.pth \
-    --token-file carla_project/data/tokens_v2/tokens_actions.npz \
-    --num-frames 300 \
-    --output dream.mp4
+# 查看训练状态
+./bin/model_tools.sh status
+
+# 快速评估模型
+./bin/model_tools.sh eval
+
+# 生成30帧视频
+./bin/model_tools.sh video 30
+
+# 生成150帧视频
+./bin/model_tools.sh video 150
+
+# 诊断模型问题
+./bin/model_tools.sh diagnose
+
+# 分析视频质量
+./bin/model_tools.sh analyze
+
+# 生成论文图表
+./bin/model_tools.sh figures
 ```
 
-#### 方式2: 使用WASD控制
-```bash
-# 1. 创建动作文件
-cat > my_drive.txt << 'EOF'
-W
-W
-W
-A
-A
-D
-D
-N
-EOF
+### 直接使用Python脚本
 
-# 2. 生成视频
-python carla_project/visualize/dream.py \
-    --vqvae-checkpoint carla_project/checkpoints/vqvae_v2/best.pth \
-    --world-model-checkpoint carla_project/checkpoints/world_model_v2/best.pth \
-    --token-file carla_project/data/tokens_v2/tokens_actions.npz \
-    --action-txt my_drive.txt \
-    --output my_drive.mp4
+#### 方式1: 生成预测视频
+```bash
+python utils/generate_videos.py \
+    --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+    --world-model-checkpoint checkpoints/world_model_ss/best.pth \
+    --token-file data/tokens_v2/tokens_actions.npz \
+    --output-dir outputs/videos \
+    --num-videos 1 \
+    --num-frames 30 \
+    --fps 10
 ```
 
-#### 方式3: 使用Scheduled Sampling模型（更稳定）
+#### 方式2: 评估模型
 ```bash
-python carla_project/visualize/dream.py \
-    --vqvae-checkpoint carla_project/checkpoints/vqvae_v2/best.pth \
-    --world-model-checkpoint carla_project/checkpoints/world_model_ss/best.pth \
-    --token-file carla_project/data/tokens_v2/tokens_actions.npz \
-    --action-txt my_drive.txt \
-    --output my_drive_ss.mp4
-```
-
-### 评估模型
-```bash
-python carla_project/evaluate/evaluate_world_model.py \
-    --vqvae-checkpoint carla_project/checkpoints/vqvae_v2/best.pth \
-    --world-model-checkpoint carla_project/checkpoints/world_model_v2/best.pth \
-    --token-file carla_project/data/tokens_v2/tokens_actions.npz \
+python evaluate/evaluate_world_model.py \
+    --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+    --world-model-checkpoint checkpoints/world_model_ss/best.pth \
+    --token-file data/tokens_v2/tokens_actions.npz \
+    --output outputs/evaluations/eval.json \
     --num-samples 100 \
     --num-sequences 10 \
-    --sequence-length 50 \
-    --output evaluation_results.json
-```
-
-### 生成对比视频
-```bash
-bash carla_project/script/quick_eval.sh \
-    carla_project/checkpoints/world_model_v2/best.pth tf
+    --sequence-length 50
 ```
 
 ## 🎮 WASD键盘控制
@@ -129,20 +117,36 @@ S
 
 ```
 carla_project/
-├── checkpoints/         # ✅ 已训练模型
-│   ├── vqvae_v2/       # VQ-VAE (240MB)
-│   ├── world_model_v2/ # World Model TF (2.7GB)
-│   └── world_model_ss/ # World Model SS (2.7GB)
+├── bin/                 # 🔧 可执行脚本
+│   ├── model_tools.sh  # 统一工具入口（推荐）
+│   ├── show_structure.sh
+│   ├── setup_env.sh
+│   ├── activate.sh
+│   ├── start_carla_server.sh
+│   └── test_wasd.sh
+├── tools/              # 🐍 Python分析工具
+│   ├── analyze_video_quality.py
+│   ├── diagnose_model.py
+│   └── extract_losses.py
+├── utils/              # 🔧 核心Python库
+│   ├── generate_videos.py
+│   ├── generate_figures.py
+│   └── export_tokens.py
+├── outputs/            # 📊 所有输出文件
+│   ├── evaluations/   # 评估结果 (.json)
+│   ├── videos/        # 生成视频 (.mp4)
+│   ├── analysis/      # 分析图表 (.png)
+│   └── figures/       # 论文图表 (.png)
+├── checkpoints/        # ✅ 已训练模型
+│   ├── vqvae_v2/      # VQ-VAE (240MB)
+│   ├── world_model_v2/# World Model TF (2.7GB)
+│   └── world_model_ss/# World Model SS (2.7GB)
 ├── data/
-│   └── tokens_v2/      # ✅ 10,000帧tokens (3.4MB)
-├── models/             # 模型定义
-├── train/              # 训练脚本
-├── evaluate/           # 评估脚本
-├── visualize/          # 可视化工具
-│   ├── dream.py       # 视频生成（支持WASD）
-│   └── compare_video.py
-├── docs/               # 📚 文档
-└── script/             # 🔧 便捷脚本
+│   └── tokens_v2/     # ✅ 10,000帧tokens (3.4MB)
+├── models/            # 模型定义
+├── train/             # 训练脚本
+├── evaluate/          # 评估脚本
+└── docs/              # 📚 文档
 ```
 
 ## 📈 模型性能
@@ -169,17 +173,26 @@ carla_project/
 ## 🔧 常用命令
 
 ```bash
-# 测试WASD功能
-bash carla_project/script/test_wasd.sh
+# 查看项目结构
+./bin/show_structure.sh
 
-# 查看WASD使用指南
-bash carla_project/script/quick_start.sh
+# 查看训练状态
+./bin/model_tools.sh status
+
+# 快速评估
+./bin/model_tools.sh eval
+
+# 生成视频
+./bin/model_tools.sh video 30
+
+# 测试WASD功能
+./bin/test_wasd.sh
 
 # 查看GPU状态
 nvidia-smi
 
 # 查看训练日志
-tail -f carla_project/logs/train_wm_v2.log
+tail -f logs/train_ss.log
 ```
 
 ## 📚 文档

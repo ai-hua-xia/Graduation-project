@@ -17,7 +17,7 @@ from pathlib import Path
 plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.rcParams['axes.unicode_minus'] = False
 
-output_dir = '/home/llb/HunyuanWorld-Voyager/bishe/carla_project/figures'
+output_dir = '/home/llb/HunyuanWorld-Voyager/bishe/carla_project/outputs/figures'
 os.makedirs(output_dir, exist_ok=True)
 
 

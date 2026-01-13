@@ -51,15 +51,25 @@ class VideoMetrics:
         Returns:
             PSNR值（dB），越高越好
         """
+        # 添加数值稳定性：如果MSE太小，限制PSNR上限
+        import warnings
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+
         if pred.ndim == 4:
             # 多帧，计算平均
             psnrs = []
             for i in range(len(pred)):
                 psnr = peak_signal_noise_ratio(target[i], pred[i], data_range=255)
+                # 限制PSNR上限为100 dB（MSE < 0.0001时）
+                if np.isinf(psnr) or psnr > 100:
+                    psnr = 100.0
                 psnrs.append(psnr)
             return np.mean(psnrs)
         else:
-            return peak_signal_noise_ratio(target, pred, data_range=255)
+            psnr = peak_signal_noise_ratio(target, pred, data_range=255)
+            if np.isinf(psnr) or psnr > 100:
+                psnr = 100.0
+            return psnr
 
     def compute_ssim(self, pred: np.ndarray, target: np.ndarray) -> float:
         """

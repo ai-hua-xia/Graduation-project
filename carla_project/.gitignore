@@ -36,8 +36,8 @@ checkpoints/
 *.ckpt
 
 # 视频和图像（保留outputs和figures用于展示）
-outputs/
-figures/
+
+
 # 但排除其他位置的媒体文件
 *.mp4
 *.avi

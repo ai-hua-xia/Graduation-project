@@ -15,6 +15,12 @@ from pathlib import Path
 import sys
 import json
 from tqdm import tqdm
+import warnings
+
+# 过滤掉第三方库的警告
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -34,9 +40,15 @@ def compute_stability_metrics(metrics_over_steps):
     Returns:
         stability_metrics: 稳定性指标字典
     """
+    import warnings
+    warnings.filterwarnings('ignore', category=RuntimeWarning)
+
     psnr_values = np.array(metrics_over_steps['psnr'])
     ssim_values = np.array(metrics_over_steps['ssim'])
     steps = np.array(metrics_over_steps['step'])
+
+    # 处理inf值：替换为100
+    psnr_values = np.where(np.isinf(psnr_values), 100.0, psnr_values)
 
     stability = {}
 
@@ -69,6 +81,9 @@ def compute_stability_metrics(metrics_over_steps):
     # 4. 平均衰减率（每帧PSNR下降多少）
     if len(psnr_values) > 1:
         psnr_decay_rate = (psnr_values[0] - psnr_values[-1]) / len(psnr_values)
+        # 处理nan和inf
+        if np.isnan(psnr_decay_rate) or np.isinf(psnr_decay_rate):
+            psnr_decay_rate = 0.0
         stability['psnr_decay_rate'] = float(psnr_decay_rate)
     else:
         stability['psnr_decay_rate'] = 0.0
@@ -76,6 +91,9 @@ def compute_stability_metrics(metrics_over_steps):
     # 5. 稳定性分数（0-100，越高越稳定）
     # 基于PSNR方差和衰减率
     psnr_std = np.std(psnr_values)
+    if np.isnan(psnr_std) or np.isinf(psnr_std):
+        psnr_std = 0.0
+
     stability_score = max(0, 100 - psnr_std * 2 - abs(stability['psnr_decay_rate']) * 10)
     stability['stability_score'] = float(stability_score)
 
