@@ -203,9 +203,9 @@ def main():
     tokens = data['tokens']
     actions = data['actions']
 
-    # 分析150帧（与medium_demo相同）
+    # 分析100帧（单个episode长度）
     start_idx = 1000
-    num_frames = 150
+    num_frames = 100
 
     results = analyze_prediction_quality(
         vqvae, world_model, tokens, actions,
@@ -246,7 +246,7 @@ def main():
 
     # 分段统计
     print("Quality by time period:")
-    periods = [(0, 50, '0-5s'), (50, 100, '5-10s'), (100, 150, '10-15s')]
+    periods = [(0, 33, '0-3.3s'), (33, 66, '3.3-6.6s'), (66, 100, '6.6-10s')]
     for start, end, label in periods:
         if end <= len(psnr):
             avg_psnr = psnr[start:end].mean()

@@ -36,11 +36,14 @@
 # 快速评估模型
 ./bin/model_tools.sh eval
 
-# 生成30帧视频（随机场景）
+# 生成30帧对比视频（随机场景）
 ./bin/model_tools.sh video 30
 
-# 生成150帧视频（固定场景，连续性好）
-./bin/model_tools.sh video 150 5000
+# 生成100帧纯预测视频（推荐，最连续场景）
+./bin/model_tools.sh video 100 1000 --pred-only
+
+# 生成100帧对比视频（最连续场景）
+./bin/model_tools.sh video 100 1000
 
 # 诊断模型问题
 ./bin/model_tools.sh diagnose
@@ -51,8 +54,6 @@
 # 生成论文图表
 ./bin/model_tools.sh figures
 ```
-
-**提示**: 使用固定起始位置（如 `video 150 5000`）可以保持场景连续性，观感更好。
 
 ### 直接使用Python脚本
 

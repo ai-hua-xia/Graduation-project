@@ -88,8 +88,11 @@ def load_actions_from_txt(txt_path):
 
     Returns:
         actions: numpy数组 (N, 2)
+        keys: 按键字符列表 (N,) 或 None
     """
     actions = []
+    keys = []
+    is_wasd_format = False
 
     with open(txt_path, 'r') as f:
         for line in f:
@@ -101,6 +104,8 @@ def load_actions_from_txt(txt_path):
             if len(line) == 1 and line.upper() in 'WASDQEN':
                 action = wasd_to_action(line)
                 actions.append(action)
+                keys.append(line.upper())
+                is_wasd_format = True
             else:
                 # 尝试解析为数值
                 try:
@@ -109,6 +114,7 @@ def load_actions_from_txt(txt_path):
                         steering = float(parts[0])
                         throttle = float(parts[1])
                         actions.append([steering, throttle])
+                        keys.append(None)
                     else:
                         print(f"Warning: 跳过无效行: {line}")
                 except ValueError:
@@ -117,10 +123,105 @@ def load_actions_from_txt(txt_path):
     if len(actions) == 0:
         raise ValueError(f"未能从 {txt_path} 中解析出任何动作")
 
-    return np.array(actions, dtype=np.float32)
+    return np.array(actions, dtype=np.float32), (keys if is_wasd_format else None)
 
 
-def generate_video(vqvae, world_model, initial_frames, actions, device, output_path):
+def draw_wasd_overlay(frame, action, key_char=None):
+    """
+    在帧上绘制WASD按键指示器
+
+    Args:
+        frame: 图像帧 (H, W, 3) BGR格式
+        action: 动作向量 [steering, throttle]
+        key_char: 按键字符（如果有的话）
+
+    Returns:
+        frame: 添加了按键指示的帧
+    """
+    frame = frame.copy()
+    h, w = frame.shape[:2]
+
+    # 按键布局（右下角）
+    # 位置：右下角，留出边距
+    base_x = w - 120
+    base_y = h - 120
+    key_size = 30
+    gap = 5
+
+    # 定义按键位置
+    keys = {
+        'W': (base_x + key_size + gap, base_y),
+        'A': (base_x, base_y + key_size + gap),
+        'S': (base_x + key_size + gap, base_y + key_size + gap),
+        'D': (base_x + 2 * (key_size + gap), base_y + key_size + gap),
+        'Q': (base_x, base_y),
+        'E': (base_x + 2 * (key_size + gap), base_y),
+    }
+
+    # 根据动作判断按下的键
+    steering, throttle = action
+    active_key = None
+
+    if key_char:
+        active_key = key_char.upper()
+    else:
+        # 根据动作推断按键
+        if abs(steering) < 0.1:  # 直行
+            if throttle > 0.6:
+                active_key = 'W'
+            elif throttle < 0.45:
+                active_key = 'S'
+        elif steering < -0.2:  # 左转
+            if throttle > 0.6:
+                active_key = 'Q'
+            else:
+                active_key = 'A'
+        elif steering > 0.2:  # 右转
+            if throttle > 0.6:
+                active_key = 'E'
+            else:
+                active_key = 'D'
+
+    # 绘制所有按键
+    for key, (x, y) in keys.items():
+        if key == active_key:
+            # 激活状态：亮绿色
+            color = (0, 255, 0)
+            thickness = -1  # 填充
+            text_color = (0, 0, 0)
+        else:
+            # 未激活状态：深灰色边框
+            color = (100, 100, 100)
+            thickness = 2
+            text_color = (150, 150, 150)
+
+        # 绘制按键背景
+        cv2.rectangle(frame, (x, y), (x + key_size, y + key_size), color, thickness)
+
+        # 绘制按键字母
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.7
+        font_thickness = 2
+        text_size = cv2.getTextSize(key, font, font_scale, font_thickness)[0]
+        text_x = x + (key_size - text_size[0]) // 2
+        text_y = y + (key_size + text_size[1]) // 2
+        cv2.putText(frame, key, (text_x, text_y), font, font_scale, text_color, font_thickness)
+
+    # 添加标签
+    label = "Controls"
+    cv2.putText(frame, label, (base_x, base_y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+    # 显示当前动作值（左上角）
+    info_text = f"Steer: {steering:+.2f}  Throttle: {throttle:.2f}"
+    cv2.putText(frame, info_text, (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+    return frame
+
+
+def generate_video(vqvae, world_model, initial_frames, actions, device, output_path, fps=10,
+                   show_controls=False, action_keys=None):
     """
     生成视频
 
@@ -131,6 +232,9 @@ def generate_video(vqvae, world_model, initial_frames, actions, device, output_p
         actions: 动作序列 (num_frames, action_dim)
         device: 设备
         output_path: 输出视频路径
+        fps: 视频帧率 (default: 10)
+        show_controls: 是否显示按键指示器 (default: False)
+        action_keys: 按键字符列表，与actions对应 (optional)
     """
     vqvae.eval()
     world_model.eval()
@@ -176,6 +280,11 @@ def generate_video(vqvae, world_model, initial_frames, actions, device, output_p
             frame = np.transpose(frame, (1, 2, 0))  # (H, W, 3)
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
+            # 添加按键指示器
+            if show_controls:
+                key_char = action_keys[t] if action_keys and t < len(action_keys) else None
+                frame = draw_wasd_overlay(frame, actions[t], key_char)
+
             frames.append(frame)
 
             # 更新buffer
@@ -194,7 +303,7 @@ def generate_video(vqvae, world_model, initial_frames, actions, device, output_p
     temp_path = str(output_path) + '.temp.mp4'
     print(f"\nSaving video to {output_path}...")
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(temp_path, fourcc, 20.0, (256, 256))
+    out = cv2.VideoWriter(temp_path, fourcc, float(fps), (256, 256))
 
     for frame in frames:
         out.write(frame)
@@ -259,6 +368,10 @@ def main():
                         help='Action file (.npy or .txt, if not provided, use from token file)')
     parser.add_argument('--action-txt', type=str, default=None,
                         help='Action text file (WASD or numeric format)')
+    parser.add_argument('--fps', type=int, default=10,
+                        help='Video FPS (default: 10)')
+    parser.add_argument('--show-controls', action='store_true',
+                        help='Show WASD control overlay on video')
     parser.add_argument('--device', type=str, default='cuda',
                         help='Device to use')
 
@@ -287,10 +400,11 @@ def main():
     initial_frames = tokens[:context_frames]
 
     # 动作序列（优先级：action-txt > action-file > token file）
+    action_keys = None
     if args.action_txt:
         # 从文本文件加载动作（支持WASD和数值格式）
         print(f"Loading actions from text file: {args.action_txt}")
-        actions = load_actions_from_txt(args.action_txt)
+        actions, action_keys = load_actions_from_txt(args.action_txt)
         print(f"Loaded {len(actions)} actions from text file")
     elif args.action_file:
         # 从.npy文件加载动作
@@ -303,6 +417,8 @@ def main():
     # 如果动作数量超过num_frames，截断
     if len(actions) > args.num_frames:
         actions = actions[:args.num_frames]
+        if action_keys:
+            action_keys = action_keys[:args.num_frames]
         print(f"Truncated actions to {args.num_frames} frames")
 
     print(f"Initial frames shape: {initial_frames.shape}")
@@ -318,7 +434,10 @@ def main():
         initial_frames,
         actions,
         device,
-        output_path
+        output_path,
+        fps=args.fps,
+        show_controls=args.show_controls,
+        action_keys=action_keys
     )
 
     print(f"\nGenerated {len(frames)} frames")

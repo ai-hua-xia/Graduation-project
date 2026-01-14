@@ -74,7 +74,7 @@ def tokens_to_image(vqvae, tokens, device):
 
 
 def generate_video(vqvae, world_model, tokens, actions, start_idx, num_frames, device,
-                   use_gt_actions=True, temperature=1.0):
+                   use_gt_actions=True, temperature=1.0, action_type='straight'):
     """
     生成预测视频
 
@@ -88,6 +88,7 @@ def generate_video(vqvae, world_model, tokens, actions, start_idx, num_frames, d
         device: 设备
         use_gt_actions: 是否使用真实动作（True）还是固定动作（False）
         temperature: 采样温度
+        action_type: 固定动作类型 ('straight', 'left', 'right', 'smooth')
 
     Returns:
         pred_frames: 预测的帧列表
@@ -117,8 +118,28 @@ def generate_video(vqvae, world_model, tokens, actions, start_idx, num_frames, d
             if use_gt_actions:
                 action_seq = actions[start_idx+t:start_idx+t+context_frames]
             else:
-                # 使用固定动作（例如直行）
-                action_seq = np.tile(np.array([0.0, 0.5], dtype=np.float32), (context_frames, 1))
+                # 使用固定动作
+                if action_type == 'straight':
+                    # 直行
+                    action_seq = np.tile(np.array([0.0, 0.5], dtype=np.float32), (context_frames, 1))
+                elif action_type == 'left':
+                    # 左转
+                    action_seq = np.tile(np.array([-0.3, 0.5], dtype=np.float32), (context_frames, 1))
+                elif action_type == 'right':
+                    # 右转
+                    action_seq = np.tile(np.array([0.3, 0.5], dtype=np.float32), (context_frames, 1))
+                elif action_type == 'smooth':
+                    # 平滑变化：先直行，然后缓慢左转，再缓慢右转
+                    progress = t / num_frames
+                    if progress < 0.33:
+                        steering = 0.0
+                    elif progress < 0.66:
+                        steering = -0.3 * ((progress - 0.33) / 0.33)
+                    else:
+                        steering = -0.3 + 0.6 * ((progress - 0.66) / 0.34)
+                    action_seq = np.tile(np.array([steering, 0.5], dtype=np.float32), (context_frames, 1))
+                else:
+                    action_seq = np.tile(np.array([0.0, 0.5], dtype=np.float32), (context_frames, 1))
 
             action_tensor = torch.from_numpy(action_seq).float().unsqueeze(0).to(device)
 
@@ -232,6 +253,74 @@ def create_comparison_video(pred_frames, gt_frames, output_path, fps=10):
         print(f"Video saved to: {output_path} (mp4v)")
 
 
+def create_prediction_only_video(pred_frames, output_path, fps=10):
+    """创建纯预测视频（只显示预测帧）"""
+    import subprocess
+    import tempfile
+
+    if len(pred_frames) == 0:
+        print("No frames to save!")
+        return
+
+    h, w = pred_frames[0].shape[:2]
+
+    # 先用mp4v编码生成临时文件
+    temp_path = output_path.parent / f"temp_{output_path.name}"
+
+    # 创建视频写入器（使用mp4v）
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(str(temp_path), fourcc, fps, (w, h))
+
+    if not out.isOpened():
+        print(f"Error: Could not open video writer for {temp_path}")
+        return
+
+    for pred in pred_frames:
+        # 添加标签
+        pred_labeled = pred.copy()
+        cv2.putText(pred_labeled, 'World Model Prediction', (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+        # 转换为BGR（OpenCV格式）
+        pred_bgr = cv2.cvtColor(pred_labeled, cv2.COLOR_RGB2BGR)
+
+        out.write(pred_bgr)
+
+    out.release()
+
+    # 使用FFmpeg转换为H.264
+    try:
+        cmd = [
+            'ffmpeg', '-y',  # 覆盖输出文件
+            '-i', str(temp_path),  # 输入文件
+            '-c:v', 'libx264',  # H.264编码
+            '-preset', 'medium',  # 编码速度
+            '-crf', '23',  # 质量（18-28，越小越好）
+            '-pix_fmt', 'yuv420p',  # 像素格式（兼容性）
+            '-loglevel', 'error',  # 只显示错误
+            str(output_path)
+        ]
+
+        subprocess.run(cmd, check=True, capture_output=True)
+
+        # 删除临时文件
+        temp_path.unlink()
+
+        print(f"Video saved to: {output_path} (H.264)")
+
+    except subprocess.CalledProcessError as e:
+        print(f"Warning: FFmpeg conversion failed, keeping mp4v version")
+        print(f"Error: {e.stderr.decode()}")
+        # 如果转换失败，重命名临时文件为最终文件
+        temp_path.rename(output_path)
+        print(f"Video saved to: {output_path} (mp4v)")
+
+    except FileNotFoundError:
+        print("Warning: FFmpeg not found, keeping mp4v version")
+        temp_path.rename(output_path)
+        print(f"Video saved to: {output_path} (mp4v)")
+
+
 def main():
     parser = argparse.ArgumentParser(description='Generate World Model prediction videos')
     parser.add_argument('--vqvae-checkpoint', type=str,
@@ -252,6 +341,13 @@ def main():
                        help='Sampling temperature (0 for greedy)')
     parser.add_argument('--start-idx', type=int, default=None,
                        help='Fixed start index (default: random)')
+    parser.add_argument('--prediction-only', action='store_true',
+                       help='Only show prediction (no ground truth comparison)')
+    parser.add_argument('--fixed-action', action='store_true',
+                       help='Use fixed smooth action sequence instead of GT actions')
+    parser.add_argument('--action-type', type=str, default='straight',
+                       choices=['straight', 'left', 'right', 'smooth'],
+                       help='Type of fixed action: straight/left/right/smooth')
 
     args = parser.parse_args()
 
@@ -312,13 +408,20 @@ def main():
         pred_frames, gt_frames = generate_video(
             vqvae, world_model, tokens, actions,
             start_idx, args.num_frames, args.device,
-            use_gt_actions=True,
-            temperature=args.temperature
+            use_gt_actions=not args.fixed_action,
+            temperature=args.temperature,
+            action_type=args.action_type
         )
 
         # 保存视频
         output_path = output_dir / f'prediction_{i+1:02d}.mp4'
-        create_comparison_video(pred_frames, gt_frames, output_path, args.fps)
+
+        if args.prediction_only:
+            # 纯预测模式：只显示预测帧
+            create_prediction_only_video(pred_frames, output_path, args.fps)
+        else:
+            # 对比模式：左预测，右真实
+            create_comparison_video(pred_frames, gt_frames, output_path, args.fps)
         print()
 
     print("="*70)
