@@ -66,16 +66,24 @@ class CARLASequenceDataset(Dataset):
         data = np.load(token_file)
         self.tokens = data['tokens']  # (N, H, W)
         self.actions = data['actions']  # (N, action_dim)
+        self.episode_ids = data['episode_ids'] if 'episode_ids' in data.files else None
 
         print(f"Loaded {len(self.tokens)} frames")
         print(f"Token shape: {self.tokens.shape}")
         print(f"Action shape: {self.actions.shape}")
 
-        # 计算有效样本数
-        self.valid_indices = len(self.tokens) - context_frames
+        # 计算有效样本索引（避免跨episode）
+        max_idx = len(self.tokens) - context_frames
+        if self.episode_ids is not None:
+            self.valid_indices = [
+                i for i in range(max_idx)
+                if self.episode_ids[i] == self.episode_ids[i + context_frames]
+            ]
+        else:
+            self.valid_indices = list(range(max_idx))
 
     def __len__(self):
-        return self.valid_indices
+        return len(self.valid_indices)
 
     def __getitem__(self, idx):
         """
@@ -84,6 +92,8 @@ class CARLASequenceDataset(Dataset):
             context_actions: (context_frames, action_dim)
             target_token: (H, W)
         """
+        idx = self.valid_indices[idx]
+
         # 上下文帧
         context_tokens = self.tokens[idx:idx + self.context_frames]
         context_actions = self.actions[idx:idx + self.context_frames]
@@ -140,16 +150,24 @@ class CARLALongSequenceDataset(Dataset):
         data = np.load(token_file)
         self.tokens = data['tokens']  # (N, H, W)
         self.actions = data['actions']  # (N, action_dim)
+        self.episode_ids = data['episode_ids'] if 'episode_ids' in data.files else None
 
         print(f"Loaded {len(self.tokens)} frames for sequence training")
         print(f"Token shape: {self.tokens.shape}")
         print(f"Action shape: {self.actions.shape}")
 
-        # 计算有效样本数（确保能取到完整序列）
-        self.valid_indices = len(self.tokens) - seq_len
+        # 计算有效样本索引（确保能取到完整序列，不跨episode）
+        max_idx = len(self.tokens) - seq_len
+        if self.episode_ids is not None:
+            self.valid_indices = [
+                i for i in range(max_idx)
+                if self.episode_ids[i] == self.episode_ids[i + seq_len - 1]
+            ]
+        else:
+            self.valid_indices = list(range(max_idx))
 
     def __len__(self):
-        return self.valid_indices
+        return len(self.valid_indices)
 
     def __getitem__(self, idx):
         """
@@ -157,6 +175,7 @@ class CARLALongSequenceDataset(Dataset):
             tokens: (seq_len, H, W) - 连续的token序列
             actions: (seq_len, action_dim) - 对应的动作序列
         """
+        idx = self.valid_indices[idx]
         tokens = self.tokens[idx:idx + self.seq_len]
         actions = self.actions[idx:idx + self.seq_len]
 

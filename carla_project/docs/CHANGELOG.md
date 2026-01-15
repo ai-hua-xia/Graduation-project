@@ -1,5 +1,22 @@
 # 变更日志
 
+## 2026-01-14
+
+### ✅ 动作-视觉相关性采集
+- 新增动作相关性数据采集脚本（collect_data_action_correlated.py）
+- 采集时实时计算动作-视觉相关性，不达标自动重采
+- 使用低速稳定段+高速转向脉冲，提高相关性稳定度
+- 质量门控加入 burst 段速度检查，减少误拒
+
+### ✅ 采集验证与训练数据
+- verify_data_action_focused.py 支持自定义数据目录与分支分析
+- 导出 tokens 增加 episode_ids，训练序列避免跨 episode
+- 数据集加载器按 episode_ids 过滤跨场景序列
+
+### ✅ 清理采集脚本
+- 删除 collect_data_action_branching.py
+- 删除 collect_data_action_focused.py
+
 ## 2026-01-13
 
 ### ✅ 脚本整理

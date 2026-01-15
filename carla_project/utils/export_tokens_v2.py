@@ -77,6 +77,8 @@ def main():
     # 编码所有数据
     all_tokens = []
     all_actions = []
+    all_episode_ids = []
+    episode_id = 0
 
     for episode_dir in tqdm(episode_dirs, desc="Processing episodes"):
         try:
@@ -102,6 +104,8 @@ def main():
 
             all_tokens.append(episode_tokens)
             all_actions.append(actions)
+            all_episode_ids.append(np.full(len(actions), episode_id, dtype=np.int32))
+            episode_id += 1
 
         except Exception as e:
             print(f"Error processing {episode_dir}: {e}")
@@ -110,6 +114,7 @@ def main():
     # 合并所有episode
     all_tokens = np.concatenate(all_tokens, axis=0)
     all_actions = np.concatenate(all_actions, axis=0)
+    all_episode_ids = np.concatenate(all_episode_ids, axis=0)
 
     print(f"\nTotal frames: {len(all_tokens)}")
     print(f"Token shape: {all_tokens.shape}")
@@ -123,6 +128,7 @@ def main():
         output_path,
         tokens=all_tokens,
         actions=all_actions,
+        episode_ids=all_episode_ids,
     )
 
     print(f"\nSaved to {output_path}")
