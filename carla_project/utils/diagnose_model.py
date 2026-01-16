@@ -1,16 +1,43 @@
 """
 诊断脚本：检查模型是否真的在预测，还是只是复制输入
 """
-import torch
-import numpy as np
-from pathlib import Path
+import argparse
 import sys
+from pathlib import Path
+
+import numpy as np
+import torch
 
 sys.path.append(str(Path(__file__).parent.parent))
 
 from models.vqvae_v2 import VQVAE_V2
 from models.world_model import WorldModel
 from train.config import WM_CONFIG
+
+
+def pick_default_world_model():
+    candidates = [
+        Path("checkpoints/world_model_v4_ss/best.pth"),
+        Path("checkpoints/world_model_v4/best.pth"),
+        Path("checkpoints/world_model_v3_ss/best.pth"),
+        Path("checkpoints/world_model_v3/best.pth"),
+        Path("checkpoints/world_model_ss/best.pth"),
+    ]
+    for path in candidates:
+        if path.exists():
+            return str(path)
+    return str(candidates[-1])
+
+
+def pick_default_token_file():
+    candidates = [
+        Path("data/tokens_v3/tokens_actions.npz"),
+        Path("data/tokens_v2/tokens_actions.npz"),
+    ]
+    for path in candidates:
+        if path.exists():
+            return str(path)
+    return str(candidates[-1])
 
 
 def diagnose_model(vqvae_path, wm_path, token_file, device='cuda'):
@@ -38,6 +65,8 @@ def diagnose_model(vqvae_path, wm_path, token_file, device='cuda'):
         context_frames=config['context_frames'],
         action_dim=config['action_dim'],
         tokens_per_frame=config['tokens_per_frame'],
+        use_memory=config.get('use_memory', False),
+        memory_dim=config.get('memory_dim', 256),
         dropout=config['dropout'],
     ).to(device)
 
@@ -173,9 +202,16 @@ def diagnose_model(vqvae_path, wm_path, token_file, device='cuda'):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="World Model Diagnostic Tool")
+    parser.add_argument("--vqvae-checkpoint", type=str, default="checkpoints/vqvae_v2/best.pth")
+    parser.add_argument("--world-model-checkpoint", type=str, default=pick_default_world_model())
+    parser.add_argument("--token-file", type=str, default=pick_default_token_file())
+    parser.add_argument("--device", type=str, default="cuda")
+    args = parser.parse_args()
+
     diagnose_model(
-        vqvae_path='checkpoints/vqvae_v2/best.pth',
-        wm_path='checkpoints/world_model_ss/best.pth',
-        token_file='data/tokens_v2/tokens_actions.npz',
-        device='cuda'
+        vqvae_path=args.vqvae_checkpoint,
+        wm_path=args.world_model_checkpoint,
+        token_file=args.token_file,
+        device=args.device,
     )

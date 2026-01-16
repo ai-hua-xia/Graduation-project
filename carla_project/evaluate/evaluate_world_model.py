@@ -119,6 +119,8 @@ def load_models(vqvae_path, world_model_path, device):
         context_frames=config['context_frames'],
         action_dim=config['action_dim'],
         tokens_per_frame=config['tokens_per_frame'],
+        use_memory=config.get('use_memory', False),
+        memory_dim=config.get('memory_dim', 256),
         dropout=config['dropout'],
     ).to(device)
 
@@ -234,6 +236,8 @@ def evaluate_autoregressive(
         token_buffer = torch.from_numpy(
             tokens[start_idx:start_idx + context_frames]
         ).unsqueeze(0).to(device)
+        memory = None
+        use_memory = getattr(world_model, 'use_memory', False)
 
         seq_pred_frames = []
         seq_real_frames = []
@@ -247,10 +251,20 @@ def evaluate_autoregressive(
                 ).float().unsqueeze(0).to(device)
 
                 # 预测下一帧
-                pred_tokens = world_model.predict_next_frame(
-                    token_buffer, action_window,
-                    temperature=temperature, top_k=top_k
-                )
+                if use_memory:
+                    pred_tokens, memory = world_model.predict_next_frame(
+                        token_buffer,
+                        action_window,
+                        memory=memory,
+                        temperature=temperature,
+                        top_k=top_k,
+                        return_memory=True,
+                    )
+                else:
+                    pred_tokens = world_model.predict_next_frame(
+                        token_buffer, action_window,
+                        temperature=temperature, top_k=top_k
+                    )
 
                 # 解码
                 pred_frame = decode_tokens_to_frame(

@@ -39,6 +39,8 @@ def load_models(vqvae_path, wm_path, device='cuda'):
         context_frames=config['context_frames'],
         action_dim=config['action_dim'],
         tokens_per_frame=config['tokens_per_frame'],
+        use_memory=config.get('use_memory', False),
+        memory_dim=config.get('memory_dim', 256),
         dropout=config['dropout'],
     ).to(device)
 
@@ -110,6 +112,8 @@ def generate_video(vqvae, world_model, tokens, actions, start_idx, num_frames, d
 
     # 自回归生成
     with torch.no_grad():
+        memory = None
+        use_memory = getattr(world_model, 'use_memory', False)
         for t in tqdm(range(num_frames), desc="Generating frames"):
             # 准备输入
             context_tensor = torch.from_numpy(context_tokens).long().unsqueeze(0).to(device)
@@ -144,7 +148,12 @@ def generate_video(vqvae, world_model, tokens, actions, start_idx, num_frames, d
             action_tensor = torch.from_numpy(action_seq).float().unsqueeze(0).to(device)
 
             # 预测下一帧
-            logits = world_model(context_tensor, action_tensor)
+            if use_memory:
+                logits, memory = world_model(
+                    context_tensor, action_tensor, memory=memory, return_memory=True
+                )
+            else:
+                logits = world_model(context_tensor, action_tensor)
 
             # 采样或贪婪选择
             if temperature > 0:

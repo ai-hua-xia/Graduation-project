@@ -4,6 +4,28 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+pick_token_file() {
+    if [ -f "data/tokens_v3/tokens_actions.npz" ]; then
+        echo "data/tokens_v3/tokens_actions.npz"
+    else
+        echo "data/tokens_v2/tokens_actions.npz"
+    fi
+}
+
+pick_world_model_checkpoint() {
+    if [ -f "checkpoints/world_model_v4_ss/best.pth" ]; then
+        echo "checkpoints/world_model_v4_ss/best.pth"
+    elif [ -f "checkpoints/world_model_v4/best.pth" ]; then
+        echo "checkpoints/world_model_v4/best.pth"
+    elif [ -f "checkpoints/world_model_v3_ss/best.pth" ]; then
+        echo "checkpoints/world_model_v3_ss/best.pth"
+    elif [ -f "checkpoints/world_model_v3/best.pth" ]; then
+        echo "checkpoints/world_model_v3/best.pth"
+    else
+        echo "checkpoints/world_model_ss/best.pth"
+    fi
+}
+
 show_help() {
     cat << EOF
 ========================================
@@ -48,13 +70,44 @@ cmd_status() {
     echo "=========================================="
     echo ""
 
-    # 检查SS训练
+    # World Model v4
+    if [ -f "logs/train_wm_v4.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v4.log | tail -1)
+        echo "📊 World Model v4: $latest_epoch"
+        grep -A 4 "^Epoch [0-9]\+:$" logs/train_wm_v4.log | tail -15 | grep -E "(Epoch|Loss|CE|Smooth|Contrast|Weight)" | tail -12
+        echo ""
+    fi
+
+    # Scheduled Sampling v4
+    if [ -f "logs/train_wm_v4_ss.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v4_ss.log | tail -1)
+        echo "📊 Scheduled Sampling v4: $latest_epoch"
+        grep -A 3 "^Epoch [0-9]\+:$" logs/train_wm_v4_ss.log | tail -12 | grep -E "(Epoch|Loss|CE|Contrast|Sampling)" | tail -9
+        echo ""
+    fi
+
+    # World Model v3
+    if [ -f "logs/train_wm_v3.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v3.log | tail -1)
+        echo "📊 World Model v3: $latest_epoch"
+        grep -A 4 "^Epoch [0-9]\+:$" logs/train_wm_v3.log | tail -15 | grep -E "(Epoch|Loss|CE|Smooth|Weight)" | tail -12
+        echo ""
+    fi
+
+    # Scheduled Sampling v3
+    if [ -f "logs/train_wm_v3_ss.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v3_ss.log | tail -1)
+        echo "📊 Scheduled Sampling v3: $latest_epoch"
+        grep -A 3 "^Epoch [0-9]\+:$" logs/train_wm_v3_ss.log | tail -12 | grep -E "(Epoch|Loss|CE|Sampling)" | tail -9
+        echo ""
+    fi
+
+    # 兼容旧日志
     if [ -f "logs/train_ss.log" ]; then
         latest_epoch=$(grep -oP "^Epoch \d+" logs/train_ss.log | tail -1)
-        echo "📊 Scheduled Sampling: $latest_epoch"
-
-        # 最近3个epoch
+        echo "📊 Scheduled Sampling (legacy): $latest_epoch"
         grep -A 3 "^Epoch [0-9]\+:$" logs/train_ss.log | tail -12 | grep -E "(Epoch|Loss|Sampling)" | tail -9
+        echo ""
     fi
 
     echo ""
@@ -78,8 +131,8 @@ cmd_eval() {
 
     # 检查文件是否存在
     VQVAE_CHECKPOINT="checkpoints/vqvae_v2/best.pth"
-    WM_CHECKPOINT="checkpoints/world_model_ss/best.pth"
-    TOKEN_FILE="data/tokens_v2/tokens_actions.npz"
+    WM_CHECKPOINT="$(pick_world_model_checkpoint)"
+    TOKEN_FILE="$(pick_token_file)"
 
     if [ ! -f "$VQVAE_CHECKPOINT" ]; then
         echo "❌ VQ-VAE checkpoint not found: $VQVAE_CHECKPOINT"
@@ -127,7 +180,14 @@ cmd_diagnose() {
     echo "=========================================="
     echo ""
 
-    python utils/diagnose_model.py
+    local wm_checkpoint="$(pick_world_model_checkpoint)"
+    local token_file="$(pick_token_file)"
+
+    python utils/diagnose_model.py \
+        --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+        --world-model-checkpoint "$wm_checkpoint" \
+        --token-file "$token_file" \
+        --device cuda
 }
 
 cmd_video() {
@@ -169,11 +229,14 @@ cmd_video() {
 
     mkdir -p outputs/videos
 
+    local wm_checkpoint="$(pick_world_model_checkpoint)"
+    local token_file="$(pick_token_file)"
+
     if [ -n "$start_idx" ]; then
         python utils/generate_videos.py \
             --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
-            --world-model-checkpoint checkpoints/world_model_ss/best.pth \
-            --token-file data/tokens_v2/tokens_actions.npz \
+            --world-model-checkpoint "$wm_checkpoint" \
+            --token-file "$token_file" \
             --output-dir outputs/videos \
             --num-videos 1 \
             --num-frames "$frames" \
@@ -184,8 +247,8 @@ cmd_video() {
     else
         python utils/generate_videos.py \
             --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
-            --world-model-checkpoint checkpoints/world_model_ss/best.pth \
-            --token-file data/tokens_v2/tokens_actions.npz \
+            --world-model-checkpoint "$wm_checkpoint" \
+            --token-file "$token_file" \
             --output-dir outputs/videos \
             --num-videos 1 \
             --num-frames "$frames" \
@@ -258,10 +321,13 @@ cmd_dream() {
     fi
     output_name="${output_name}.mp4"
 
+    local wm_checkpoint="$(pick_world_model_checkpoint)"
+    local token_file="$(pick_token_file)"
+
     python visualize/dream.py \
         --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
-        --world-model-checkpoint checkpoints/world_model_ss/best.pth \
-        --token-file data/tokens_v2/tokens_actions.npz \
+        --world-model-checkpoint "$wm_checkpoint" \
+        --token-file "$token_file" \
         --action-txt "$action_file" \
         --output "outputs/videos/${output_name}" \
         --fps 10 \

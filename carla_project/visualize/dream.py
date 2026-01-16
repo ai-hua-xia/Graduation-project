@@ -343,6 +343,8 @@ def load_models(vqvae_path, world_model_path, device):
         context_frames=config['context_frames'],
         action_dim=config['action_dim'],
         tokens_per_frame=config['tokens_per_frame'],
+        use_memory=config.get('use_memory', False),
+        memory_dim=config.get('memory_dim', 256),
         dropout=config['dropout'],
     ).to(device)
 

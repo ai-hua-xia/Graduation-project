@@ -42,19 +42,32 @@ WM_CONFIG = {
     # 训练参数
     'lr': 5e-5,              # 大模型用更小学习率
     'epochs': 300,           # 更多epoch
-    'batch_size': 32,        # 优化为32以更好利用显存
-    'num_workers': 8,
+    'batch_size': 16,        # 优化为32以更好利用显存
+    'num_workers': 12,
 
     # 损失权重
     'ce_weight': 1.0,
     'smooth_weight_start': 0.0,  # 初始平滑权重
-    'smooth_weight_end': 0.02,  # 最终平滑权重
+    'smooth_weight_end': 0.005,  # 最终平滑权重
     'smooth_warmup_epochs': 60,  # 平滑权重预热轮数
     'beta': 2.0,  # 动作自适应系数
 
     # 混合精度
     'use_amp': True,
     'amp_dtype': 'bf16',
+
+    # 动作依赖增强
+    'action_contrast_weight': 1.0,
+    'action_contrast_margin': 1.0,
+    'action_contrast_prob': 1.0,
+    'action_contrast_mode': 'inverse',  # 'inverse' or 'hinge'
+    'action_contrast_type': 'swap',  # 'swap' or 'noise'
+    'action_noise_std_steer': 0.1,
+    'action_noise_std_throttle': 0.05,
+
+    # 记忆模块
+    'use_memory': True,
+    'memory_dim': 256,
 
     # 保存
     'save_every': 5,

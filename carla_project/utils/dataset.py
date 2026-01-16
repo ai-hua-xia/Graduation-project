@@ -4,6 +4,7 @@
 
 import torch
 from torch.utils.data import Dataset
+from torch.utils.data.distributed import DistributedSampler
 import numpy as np
 import cv2
 from pathlib import Path
@@ -122,17 +123,42 @@ def get_vqvae_dataloader(data_root, batch_size, num_workers=8, transform=None):
     return dataloader
 
 
-def get_world_model_dataloader(token_file, batch_size, context_frames=4, num_workers=8):
+def get_world_model_dataloader(
+    token_file,
+    batch_size,
+    context_frames=4,
+    num_workers=8,
+    distributed=False,
+    rank=0,
+    world_size=1,
+    return_sampler=False,
+):
     """获取World Model数据加载器"""
     dataset = CARLASequenceDataset(token_file, context_frames)
-    dataloader = torch.utils.data.DataLoader(
-        dataset,
+    sampler = None
+    shuffle = True
+    if distributed:
+        sampler = DistributedSampler(
+            dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=True,
+        )
+        shuffle = False
+    dataloader_kwargs = dict(
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=shuffle,
+        sampler=sampler,
         num_workers=num_workers,
         pin_memory=True,
         drop_last=True,
     )
+    if num_workers > 0:
+        dataloader_kwargs['prefetch_factor'] = 2
+        dataloader_kwargs['persistent_workers'] = True
+    dataloader = torch.utils.data.DataLoader(dataset, **dataloader_kwargs)
+    if return_sampler:
+        return dataloader, sampler
     return dataloader
 
 
@@ -185,15 +211,37 @@ class CARLALongSequenceDataset(Dataset):
         }
 
 
-def get_world_model_sequence_dataloader(token_file, batch_size, seq_len=16, num_workers=8):
+def get_world_model_sequence_dataloader(
+    token_file,
+    batch_size,
+    seq_len=16,
+    num_workers=8,
+    distributed=False,
+    rank=0,
+    world_size=1,
+    return_sampler=False,
+):
     """获取World Model序列数据加载器（用于Scheduled Sampling）"""
     dataset = CARLALongSequenceDataset(token_file, seq_len)
+    sampler = None
+    shuffle = True
+    if distributed:
+        sampler = DistributedSampler(
+            dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=True,
+        )
+        shuffle = False
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=shuffle,
+        sampler=sampler,
         num_workers=num_workers,
         pin_memory=True,
         drop_last=True,
     )
+    if return_sampler:
+        return dataloader, sampler
     return dataloader

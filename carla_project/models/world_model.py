@@ -30,6 +30,8 @@ class WorldModel(nn.Module):
         context_frames=4,  # 上下文帧数
         action_dim=2,  # 动作维度
         tokens_per_frame=256,  # 每帧token数 (16×16)
+        use_memory=False,
+        memory_dim=256,
         dropout=0.1,
     ):
         super().__init__()
@@ -38,6 +40,8 @@ class WorldModel(nn.Module):
         self.context_frames = context_frames
         self.tokens_per_frame = tokens_per_frame
         self.hidden_dim = hidden_dim
+        self.use_memory = use_memory
+        self.memory_dim = memory_dim
 
         # Token embedding
         self.token_embedding = nn.Embedding(num_embeddings, embed_dim)
@@ -59,6 +63,16 @@ class WorldModel(nn.Module):
             nn.Linear(512, hidden_dim),
         )
 
+        # 记忆模块：汇总历史上下文 + 动作
+        if self.use_memory:
+            self.memory_input_proj = nn.Sequential(
+                nn.Linear(hidden_dim * 2, memory_dim),
+                nn.Tanh(),
+            )
+            self.memory_gru = nn.GRUCell(memory_dim, memory_dim)
+            self.memory_to_hidden = nn.Linear(memory_dim, hidden_dim)
+            self.memory_pos_embedding = nn.Parameter(torch.zeros(1, 1, hidden_dim))
+
         # FiLMed Transformer层
         self.transformer_layers = nn.ModuleList([
             FiLMedTransformerLayer(hidden_dim, num_heads, hidden_dim, dropout)
@@ -71,11 +85,12 @@ class WorldModel(nn.Module):
             nn.Linear(hidden_dim, num_embeddings),
         )
 
-    def forward(self, token_seq, action_seq, return_features=False):
+    def forward(self, token_seq, action_seq, memory=None, return_features=False, return_memory=False):
         """
         Args:
             token_seq: (B, context_frames, H, W) - token索引
             action_seq: (B, context_frames, action_dim) - 动作序列
+            memory: (B, memory_dim) - 记忆向量
 
         Returns:
             logits: (B, tokens_per_frame, num_embeddings) - 下一帧预测
@@ -98,6 +113,18 @@ class WorldModel(nn.Module):
         action_seq_flat = action_seq.view(B, -1)  # (B, context_frames * action_dim)
         action_embedding = self.action_encoder(action_seq_flat)  # (B, hidden_dim)
 
+        memory_next = None
+        if self.use_memory:
+            if memory is None:
+                memory = torch.zeros(B, self.memory_dim, device=x.device, dtype=x.dtype)
+            token_summary = x.mean(dim=1)
+            memory_input = torch.cat([token_summary, action_embedding], dim=-1)
+            memory_input = self.memory_input_proj(memory_input)
+            memory_next = self.memory_gru(memory_input, memory)
+            memory_token = self.memory_to_hidden(memory_next).unsqueeze(1)
+            memory_token = memory_token + self.memory_pos_embedding
+            x = torch.cat([memory_token, x], dim=1)
+
         # Transformer with FiLM
         for layer in self.transformer_layers:
             x = layer(x, action_embedding)
@@ -110,17 +137,22 @@ class WorldModel(nn.Module):
         # 输出logits
         logits = self.output_proj(x_next)  # (B, tokens_per_frame, num_embeddings)
 
+        if return_features and return_memory:
+            return logits, x_next, memory_next
         if return_features:
             return logits, x_next
+        if return_memory:
+            return logits, memory_next
         return logits
 
-    def predict_next_frame(self, token_seq, action_seq, temperature=1.0, top_k=None):
+    def predict_next_frame(self, token_seq, action_seq, memory=None, temperature=1.0, top_k=None, return_memory=False):
         """
         预测下一帧token
 
         Args:
             token_seq: (B, context_frames, H, W)
             action_seq: (B, context_frames, action_dim)
+            memory: (B, memory_dim) - 记忆向量
             temperature: 采样温度
             top_k: top-k采样
 
@@ -129,7 +161,12 @@ class WorldModel(nn.Module):
         """
         self.eval()
         with torch.no_grad():
-            logits = self.forward(token_seq, action_seq)  # (B, tokens_per_frame, num_embeddings)
+            if return_memory:
+                logits, memory_next = self.forward(
+                    token_seq, action_seq, memory=memory, return_memory=True
+                )
+            else:
+                logits = self.forward(token_seq, action_seq, memory=memory)  # (B, tokens_per_frame, num_embeddings)
 
             # 温度采样
             logits = logits / temperature
@@ -148,6 +185,8 @@ class WorldModel(nn.Module):
             H = W = int(self.tokens_per_frame ** 0.5)
             next_tokens = next_tokens.view(-1, H, W)
 
+        if return_memory:
+            return next_tokens, memory_next
         return next_tokens
 
     def dream(self, initial_tokens, actions, vqvae, device='cuda'):
@@ -171,6 +210,7 @@ class WorldModel(nn.Module):
 
         # 初始化token buffer
         token_buffer = initial_tokens.clone().to(device)  # (B, context_frames, H, W)
+        memory = None
 
         frames = []
 
@@ -185,7 +225,9 @@ class WorldModel(nn.Module):
                     action_window = actions[:, t-self.context_frames+1:t+1]
 
                 # 预测下一帧
-                next_tokens = self.predict_next_frame(token_buffer, action_window)  # (B, H, W)
+                next_tokens, memory = self.predict_next_frame(
+                    token_buffer, action_window, memory=memory, return_memory=True
+                )  # (B, H, W)
 
                 # 解码为图像
                 frame = vqvae.decode_tokens(next_tokens)  # (B, 3, 256, 256)
