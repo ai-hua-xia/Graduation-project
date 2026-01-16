@@ -1,5 +1,12 @@
 # 变更日志
 
+## 2026-01-16
+
+### ✅ 文档同步
+- README/QUICKSTART/PROJECT_STRUCTURE 对齐当前脚本与目录结构
+- 补充 model_tools 自动选择 tokens/模型的规则说明
+- 新增 CARLA 0.9.16 服务器安装文档 `docs/INSTALL_SERVER.md`
+
 ## 2026-01-14
 
 ### ✅ 动作-视觉相关性采集
@@ -22,7 +29,7 @@
 ### ✅ 脚本整理
 - 精简 bin/ 脚本从12个减少到6个
 - 删除冗余脚本（quick_test, quick_eval, check_training, run_pipeline, start_training, quick_start）
-- 统一入口：model_tools.sh 提供6个子命令（status, eval, diagnose, video, analyze, figures）
+- 统一入口：model_tools.sh 提供 status/eval/diagnose/video/analyze/figures
 - 三层架构：bin/（Shell脚本）→ tools/（分析工具）→ utils/（核心库）
 - 统一输出目录：outputs/（evaluations, videos, analysis, figures）
 
@@ -107,13 +114,13 @@
 
 ## 下一步
 
-- [ ] 完成Scheduled Sampling训练
-- [ ] 对比TF和SS模型性能
-- [ ] 生成更多测试视频
-- [ ] 清理冗余checkpoint（可节省48GB）
+- [ ] 继续完善 Scheduled Sampling 版本（统一目录命名）
+- [ ] 对比 v4 与 v4_ss 的评估结果
+- [ ] 清理旧 checkpoint 与冗余日志
 
 ## 参考
 
 - 查看 [README.md](README.md) 了解项目概况
 - 查看 [QUICKSTART.md](QUICKSTART.md) 开始使用
-- 查看 [SETUP.md](SETUP.md) 了解项目结构
+- 查看 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) 了解结构
+- 查看 [INSTALL_SERVER.md](INSTALL_SERVER.md) 配置 CARLA 服务器

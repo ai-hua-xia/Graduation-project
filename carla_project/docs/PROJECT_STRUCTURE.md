@@ -2,42 +2,94 @@
 
 ## 📂 目录组织
 
-### `bin/` - 可执行脚本（6个）
-所有用户直接调用的 Shell 脚本，提供统一的命令行接口。
+### `bin/` - 可执行脚本（5个）
 
-| 脚本 | 功能 | 使用频率 |
-|------|------|---------|
-| **model_tools.sh** | 🌟 统一工具入口 | ⭐⭐⭐ 最常用 |
-| show_structure.sh | 显示项目结构 | ⭐⭐ 常用 |
-| setup_env.sh | 环境设置 | ⭐ 初次使用 |
-| activate.sh | 环境激活 | ⭐ 初次使用 |
-| start_carla_server.sh | 启动CARLA服务器 | ⭐ 数据采集时 |
-| test_wasd.sh | 测试WASD功能 | ⭐ 功能测试 |
+| 脚本 | 功能 | 备注 |
+|------|------|------|
+| **model_tools.sh** | 🌟 统一工具入口 | 推荐主入口，提供 status/eval/video/dream/diagnose/analyze/figures |
+| start_carla_server.sh | 启动 CARLA 服务器 | 默认使用 `~/CARLA_0.9.16`，参考 `INSTALL_SERVER.md` |
+| setup_env.sh | 环境检查与依赖提示 | 依赖本机 conda 环境 `voyager` |
+| activate.sh | 快速进入工作环境 | 含硬编码路径，可按需修改 |
+| test_wasd.sh | WASD 测试脚本 | 旧路径写法，建议使用 `model_tools.sh dream` |
 
-**推荐使用**: `./bin/model_tools.sh` 作为主要入口
+### `collect/` - 数据采集
 
-### `tools/` - Python分析工具（4个）
-专门用于分析和诊断的 Python 脚本，由 `bin/` 脚本调用。
+| 脚本 | 功能 |
+|------|------|
+| collect_data.py | 基础采集（Town03，固定参数） |
+| collect_data_action_correlated.py | 动作相关性采集（可配置） |
+| verify_data_action_focused.py | 采集质量验证 |
+| utils.py | 采集辅助函数 |
 
-| 工具 | 功能 | 调用方式 |
-|------|------|---------|
-| analyze_video_quality.py | 分析视频质量衰减 | `./bin/model_tools.sh analyze` |
-| diagnose_model.py | 诊断模型问题 | `./bin/model_tools.sh diagnose` |
-| extract_losses.py | 提取训练损失 | 手动调用 |
-| analyze_action_data.py | 分析动作数据 | 手动调用 |
+### `train/` - 训练脚本
 
-### `utils/` - 核心Python库（4个）
-可被其他模块导入的核心功能库。
+| 脚本 | 功能 |
+|------|------|
+| train_vqvae_v2.py | 训练 VQ-VAE v2 |
+| train_world_model.py | 训练 World Model（Teacher Forcing） |
+| train_world_model_ss.py | 训练 Scheduled Sampling 版本 |
+| train_vqvae.py | 旧版本 VQ-VAE（保留） |
 
-| 工具 | 功能 | 调用方式 |
-|------|------|---------|
-| generate_videos.py | 生成预测视频 | `./bin/model_tools.sh video` |
-| generate_figures.py | 生成论文图表 | `./bin/model_tools.sh figures` |
-| export_tokens.py | 导出VQ-VAE tokens | 手动调用 |
-| extract_loss_from_logs.py | 从日志提取损失 | 手动调用 |
+### `evaluate/` - 评估
 
-### `outputs/` - 统一输出目录
-所有生成的文件都保存在这里。
+| 脚本 | 功能 |
+|------|------|
+| evaluate_world_model.py | 评估主脚本 |
+| metrics.py | 指标实现 |
+| visualize_results.py | 评估结果可视化 |
+
+### `visualize/` - 可视化/梦境生成
+
+| 脚本 | 功能 |
+|------|------|
+| dream.py | WASD 动作序列生成视频 |
+| compare_video.py | 视频对比工具 |
+
+### `tools/` - 分析工具（4个）
+
+| 工具 | 功能 |
+|------|------|
+| analyze_action_data.py | 动作分布分析 |
+| analyze_ss_training.py | SS 训练分析 |
+| analyze_video_quality.py | 视频质量衰减分析 |
+| training_roadmap.py | 训练路线图/记录 |
+
+### `utils/` - 核心库
+
+| 工具 | 功能 |
+|------|------|
+| dataset.py | 数据加载与采样 |
+| diagnose_model.py | 模型诊断 |
+| export_tokens_v2.py | 导出 VQ-VAE tokens |
+| generate_videos.py | 生成预测视频 |
+| generate_figures.py | 生成论文图表 |
+| extract_loss_from_logs.py | 训练日志解析 |
+| extract_vqvae_loss.py | VQ-VAE 损失提取 |
+
+### `data/` - 数据
+
+```
+data/
+├── raw/                 # 基础采集数据
+├── raw_action_corr_v1/  # 动作相关性 v1
+├── raw_action_corr_v2/  # 动作相关性 v2
+├── tokens_v2/           # tokens_actions.npz
+└── tokens_v3/           # tokens_actions.npz
+```
+
+### `checkpoints/` - 模型权重
+
+```
+checkpoints/
+├── vqvae_v2/
+├── world_model_v2/
+├── world_model_v2_ss/
+├── world_model_v3/
+├── world_model_v4/
+└── world_model_v4_ss_e029/
+```
+
+### `outputs/` - 输出目录
 
 ```
 outputs/
@@ -47,85 +99,42 @@ outputs/
 └── figures/        # 论文图表 (.png)
 ```
 
+### `logs/` - 训练日志
+
+- 训练输出集中在 `logs/`（例如 `train_wm_v4.log`、`train_wm_v4_ss_e029.log`）
+
 ## 🎯 设计原则
 
-### 三层架构
-1. **用户层** (`bin/`): Shell脚本，提供友好的命令行接口
-2. **工具层** (`tools/`): Python分析工具，专注于诊断和分析
-3. **核心层** (`utils/`): Python库，提供可复用的核心功能
-
-### 职责分离
-- **`bin/`**: 只包含 Shell 脚本，不包含 Python 文件
-- **`tools/`**: 独立的分析工具，可单独运行
-- **`utils/`**: 可被导入的库，提供通用功能
-
-### 统一入口
-- 推荐使用 `./bin/model_tools.sh` 作为主要入口
-- 提供 6 个子命令：status, eval, diagnose, video, analyze, figures
-- 所有常用功能都可以通过这个脚本访问
+- **统一入口**：日常使用优先 `./bin/model_tools.sh`
+- **层次清晰**：bin（入口）→ tools/utils（工具库）→ train/evaluate/visualize（业务脚本）
+- **输出集中**：所有可视化与评估产物都写入 `outputs/`
 
 ## 📋 常用命令速查
 
 ```bash
-# 查看项目结构
-./bin/show_structure.sh
+# 启动 CARLA
+./bin/start_carla_server.sh
 
 # 查看训练状态
 ./bin/model_tools.sh status
 
-# 快速评估模型
+# 快速评估
 ./bin/model_tools.sh eval
 
-# 生成30帧视频
+# 生成视频
 ./bin/model_tools.sh video 30
 
-# 诊断模型问题
-./bin/model_tools.sh diagnose
-
-# 分析视频质量
-./bin/model_tools.sh analyze
-
-# 生成论文图表
-./bin/model_tools.sh figures
+# WASD 梦境
+./bin/model_tools.sh dream actions.txt
 ```
-
-## 🗑️ 已删除的冗余脚本
-
-以下脚本已被删除或合并：
-
-| 删除的脚本 | 原因 | 替代方案 |
-|-----------|------|---------|
-| quick_test.sh | 与 model_tools.sh eval 重复 | `./bin/model_tools.sh eval` |
-| quick_eval.sh | 路径错误，功能重复 | `./bin/model_tools.sh eval` |
-| check_training.sh | 与 model_tools.sh status 重复 | `./bin/model_tools.sh status` |
-| run_pipeline.sh | 过于庞大，路径错误 | 分步执行或参考文档 |
-| start_training.sh | 路径错误，实际很少使用 | 直接运行 Python 训练脚本 |
-| quick_start.sh | 只打印帮助信息 | 查看 docs/README.md |
-
-**从 12 个脚本精简到 6 个核心脚本**，更清晰、更易维护。
 
 ## 📚 文档
 
-- **[README.md](docs/README.md)** - 项目主文档
-- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - 本文档
-- 所有文档已更新以反映新的脚本结构
-
-## ✅ 验证
-
-运行以下命令验证结构：
-
-```bash
-# 查看所有脚本
-ls -lh bin/*.sh
-
-# 测试主工具
-./bin/model_tools.sh help
-
-# 查看项目结构
-./bin/show_structure.sh
-```
+- **[README.md](README.md)** - 项目主文档
+- **[QUICKSTART.md](QUICKSTART.md)** - 快速开始
+- **[INSTALL_SERVER.md](INSTALL_SERVER.md)** - CARLA 服务器安装
+- **[CHANGELOG.md](CHANGELOG.md)** - 变更日志
 
 ---
 
-**最后更新**: 2026-01-13
-**脚本数量**: bin/ (6), tools/ (4), utils/ (4)
+**最后更新**: 2026-01-16

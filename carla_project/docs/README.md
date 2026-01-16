@@ -1,36 +1,39 @@
 # CARLA World Model
 
-基于CARLA模拟器的自动驾驶世界模型项目，使用VQ-VAE和Transformer学习从动作预测未来视觉帧。
+基于 CARLA 模拟器的动作条件世界模型项目，使用 VQ-VAE v2 和 Transformer 学习从动作预测未来视觉帧。
 
 ## 🎯 项目简介
 
-本项目实现了一个端到端的世界模型系统，能够根据驾驶动作预测未来的视觉场景。
+本项目实现了一个端到端的世界模型系统，能够根据驾驶动作预测未来的视觉场景，并支持生成对比视频与 WASD 动作序列的“梦境”视频。
 
 **核心技术**：
-- **VQ-VAE v2**: 将256×256图像压缩为16×16离散tokens
-- **Transformer World Model**: 238M参数，基于历史帧和动作预测下一帧
-- **Scheduled Sampling**: 缓解自回归生成时的误差累积
-- **WASD控制**: 支持键盘输入生成自定义驾驶视频
+- **VQ-VAE v2**: 256×256 图像压缩为 16×16 离散 tokens
+- **Transformer World Model**: 基于历史帧与动作预测下一帧
+- **Scheduled Sampling**: 缓解自回归生成误差累积
+- **WASD 控制**: 支持文本文件输入动作序列
 
 ## 📊 当前状态
 
-| 模块 | 状态 | 详情 |
+| 模块 | 现状 | 说明 |
 |------|------|------|
-| 数据采集 | ✅ 完成 | 10,000帧，Town03地图 |
-| VQ-VAE v2 | ✅ 训练完成 | Epoch 99, Loss 0.0018 |
-| World Model (TF) | ✅ 训练完成 | Epoch 149, Loss 0.138 |
-| World Model (SS) | ✅ 训练完成 | Epoch 2, Loss 0.050 |
-| 评估系统 | ✅ 已实现 | PSNR/SSIM/稳定性指标 |
-| WASD控制 | ✅ 已实现 | 支持文本文件输入 |
+| 数据集 | ✅ 已就绪 | `data/raw`、`data/raw_action_corr_v1`、`data/raw_action_corr_v2` |
+| Tokens | ✅ 已就绪 | `data/tokens_v2/tokens_actions.npz`、`data/tokens_v3/tokens_actions.npz` |
+| VQ-VAE | ✅ v2 checkpoint | `checkpoints/vqvae_v2/best.pth` |
+| World Model | ✅ 多版本 | `checkpoints/world_model_v2`、`world_model_v3`、`world_model_v4` |
+| Scheduled Sampling | ✅ 有可用权重 | `checkpoints/world_model_v2_ss`、`world_model_v4_ss_e029` |
+| 工具脚本 | ✅ 已统一 | `bin/model_tools.sh` 支持 status/eval/video/dream/diagnose/analyze/figures |
 
-**所有模型已训练完成，可直接使用！**
+**自动选择规则（model_tools.sh）**：
+- Token 文件：优先 `data/tokens_v3/tokens_actions.npz`，否则使用 `data/tokens_v2/tokens_actions.npz`
+- World Model checkpoint：`world_model_v4_ss` → `world_model_v4` → `world_model_v3_ss` → `world_model_v3` → `world_model_ss`
+- 当前仓库没有 `checkpoints/world_model_v4_ss` 目录，如需使用 `world_model_v4_ss_e029` 请手动指定路径
 
 ## 🚀 快速开始
 
 ### 使用统一工具脚本
 
 ```bash
-# 查看训练状态
+# 查看训练进度摘要
 ./bin/model_tools.sh status
 
 # 快速评估模型
@@ -39,73 +42,48 @@
 # 生成30帧对比视频（随机场景）
 ./bin/model_tools.sh video 30
 
-# 生成100帧纯预测视频（推荐，最连续场景）
-./bin/model_tools.sh video 100 1000 --pred-only
+# 固定起点生成视频（可按数据集实际情况调整 start_idx）
+./bin/model_tools.sh video 100 1990
 
-# 生成100帧对比视频（最连续场景）
-./bin/model_tools.sh video 100 1000
+# 生成纯预测视频（不显示 GT）
+./bin/model_tools.sh video 100 1990 --pred-only
 
-# 诊断模型问题
-./bin/model_tools.sh diagnose
-
-# 分析视频质量
-./bin/model_tools.sh analyze
-
-# 生成论文图表
-./bin/model_tools.sh figures
+# 使用 WASD 动作文件生成梦境视频
+./bin/model_tools.sh dream actions.txt --show-controls
 ```
 
-### 直接使用Python脚本
+### 直接使用 Python 脚本
 
 #### 方式1: 生成预测视频
 ```bash
-# 随机场景
 python utils/generate_videos.py \
     --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
-    --world-model-checkpoint checkpoints/world_model_ss/best.pth \
-    --token-file data/tokens_v2/tokens_actions.npz \
-    --output-dir outputs/videos \
-    --num-videos 1 \
-    --num-frames 30 \
-    --fps 10
-
-# 固定场景（推荐）
-python utils/generate_videos.py \
-    --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
-    --world-model-checkpoint checkpoints/world_model_ss/best.pth \
-    --token-file data/tokens_v2/tokens_actions.npz \
+    --world-model-checkpoint checkpoints/world_model_v4/best.pth \
+    --token-file data/tokens_v3/tokens_actions.npz \
     --output-dir outputs/videos \
     --num-videos 1 \
     --num-frames 150 \
     --fps 10 \
-    --start-idx 5000
+    --temperature 1.0 \
+    --prediction-only
 ```
 
 #### 方式2: 评估模型
 ```bash
 python evaluate/evaluate_world_model.py \
     --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
-    --world-model-checkpoint checkpoints/world_model_ss/best.pth \
-    --token-file data/tokens_v2/tokens_actions.npz \
+    --world-model-checkpoint checkpoints/world_model_v4/best.pth \
+    --token-file data/tokens_v3/tokens_actions.npz \
     --output outputs/evaluations/eval.json \
     --num-samples 100 \
     --num-sequences 10 \
-    --sequence-length 50
+    --sequence-length 50 \
+    --device cuda
 ```
 
-## 🎮 WASD键盘控制
+## 🎮 WASD 键盘控制
 
-支持7个按键控制驾驶：
-
-| 按键 | 动作 | 说明 |
-|------|------|------|
-| **W** | 加速 | 直行+最大油门 |
-| **S** | 减速 | 直行+最小油门 |
-| **A** | 左转 | 左转+中等油门 |
-| **D** | 右转 | 右转+中等油门 |
-| **Q** | 左转+加速 | 组合动作 |
-| **E** | 右转+加速 | 组合动作 |
-| **N** | 直行 | 保持中等油门 |
+支持 7 个按键控制驾驶（WASD/QE/N），映射逻辑在 `visualize/dream.py` 中定义。
 
 **示例动作文件**：
 ```
@@ -126,70 +104,59 @@ E
 S
 ```
 
-详见 [WASD.md](docs/WASD.md)
+**生成命令**：
+```bash
+./bin/model_tools.sh dream actions.txt --show-controls
+```
 
 ## 📁 项目结构
 
 ```
 carla_project/
-├── bin/                 # 🔧 可执行脚本
-│   ├── model_tools.sh  # 统一工具入口（推荐）
-│   ├── show_structure.sh
+├── bin/                   # 🔧 脚本入口
+│   ├── model_tools.sh
 │   ├── setup_env.sh
 │   ├── activate.sh
 │   ├── start_carla_server.sh
 │   └── test_wasd.sh
-├── tools/              # 🐍 Python分析工具
-│   ├── analyze_video_quality.py
-│   ├── diagnose_model.py
-│   └── extract_losses.py
-├── utils/              # 🔧 核心Python库
-│   ├── generate_videos.py
-│   ├── generate_figures.py
-│   └── export_tokens.py
-├── outputs/            # 📊 所有输出文件
-│   ├── evaluations/   # 评估结果 (.json)
-│   ├── videos/        # 生成视频 (.mp4)
-│   ├── analysis/      # 分析图表 (.png)
-│   └── figures/       # 论文图表 (.png)
-├── checkpoints/        # ✅ 已训练模型
-│   ├── vqvae_v2/      # VQ-VAE (240MB)
-│   ├── world_model_v2/# World Model TF (2.7GB)
-│   └── world_model_ss/# World Model SS (2.7GB)
-├── data/
-│   └── tokens_v2/     # ✅ 10,000帧tokens (3.4MB)
-├── models/            # 模型定义
-├── train/             # 训练脚本
-├── evaluate/          # 评估脚本
-└── docs/              # 📚 文档
+├── collect/               # 数据采集
+├── train/                 # 训练脚本
+├── evaluate/              # 评估脚本
+├── visualize/             # 可视化/梦境生成
+├── tools/                 # 分析工具
+├── utils/                 # 核心库
+├── outputs/               # 输出结果
+│   ├── evaluations/
+│   ├── videos/
+│   ├── analysis/
+│   └── figures/
+├── checkpoints/           # 已训练模型
+│   ├── vqvae_v2/
+│   ├── world_model_v2/
+│   ├── world_model_v2_ss/
+│   ├── world_model_v3/
+│   ├── world_model_v4/
+│   └── world_model_v4_ss_e029/
+├── data/                  # 数据与 tokens
+│   ├── raw/
+│   ├── raw_action_corr_v1/
+│   ├── raw_action_corr_v2/
+│   ├── tokens_v2/
+│   └── tokens_v3/
+└── docs/                  # 📚 文档
 ```
 
-## 📈 模型性能
+## 🧠 模型与数据配置
 
-### VQ-VAE v2
-- **Codebook**: 1024 embeddings × 256 dim
-- **训练**: 100 epochs
-- **Loss**: 0.0018
-- **压缩**: 256×256 → 16×16 tokens
-
-### World Model v2 (Teacher Forcing)
-- **参数量**: 238M
-- **架构**: 16层Transformer, 16个注意力头
-- **训练**: 150 epochs
-- **Loss**: 0.138
-- **上下文**: 4帧历史
-
-### World Model (Scheduled Sampling)
-- **基于**: World Model v2预训练
-- **训练**: 3 epochs
-- **Loss**: 0.050
-- **优势**: 更稳定的长期生成
+- **VQ-VAE v2**: codebook 1024 × 256，256×256 → 16×16 tokens（见 `train/train_vqvae_v2.py`）
+- **World Model**: 16 层 Transformer、16 heads、context=4（见 `train/config.py`）
+- **数据集**: `data/raw` 为基础采集，`data/raw_action_corr_v1/v2` 为动作相关性采集版本
 
 ## 🔧 常用命令
 
 ```bash
-# 查看项目结构
-./bin/show_structure.sh
+# 启动 CARLA 服务器
+./bin/start_carla_server.sh
 
 # 查看训练状态
 ./bin/model_tools.sh status
@@ -200,54 +167,30 @@ carla_project/
 # 生成视频
 ./bin/model_tools.sh video 30
 
-# 测试WASD功能
-./bin/test_wasd.sh
-
-# 查看GPU状态
-nvidia-smi
-
-# 查看训练日志
-tail -f logs/train_ss.log
+# WASD 梦境生成
+./bin/model_tools.sh dream actions.txt
 ```
 
 ## 📚 文档
 
-- **[快速开始](docs/QUICKSTART.md)** - 详细使用指南
-- **[环境配置](docs/SETUP.md)** - 安装和项目结构
-- **[WASD控制](docs/WASD.md)** - 键盘动作控制详解
-- **[变更日志](docs/CHANGELOG.md)** - 开发历史
+- **[快速开始](QUICKSTART.md)**
+- **[项目结构](PROJECT_STRUCTURE.md)**
+- **[CARLA 服务器安装](INSTALL_SERVER.md)**
+- **[变更日志](CHANGELOG.md)**
+- **[开题报告](开题报告.md)**
 
 ## 🛠️ 技术栈
 
-- **深度学习**: PyTorch 2.5.1, Mixed Precision (bf16)
-- **模拟器**: CARLA 0.9.15
+- **深度学习**: PyTorch 2.x（详见 `requirements_carla.txt`）
+- **模拟器**: CARLA 0.9.16 服务器（Python API 版本需与服务器一致）
 - **评估指标**: PSNR, SSIM, LPIPS
 - **可视化**: OpenCV, Matplotlib, FFmpeg
 
 ## 💡 使用建议
 
-### 选择模型
-- **快速测试**: 使用World Model v2 (TF)
-- **长期生成**: 使用World Model (SS)，更稳定
-- **对比实验**: 同时测试两个模型
-
-### 动作设计
-- 保持在训练范围内：steering [-0.6, 0.6], throttle [0.4, 0.7]
-- 避免频繁切换动作
-- 使用平滑的动作序列
-
-### 生成质量
-- 使用Scheduled Sampling模型
-- 控制生成长度（建议<300帧）
-- 调整temperature和top_k参数
-
-## 🎓 研究价值
-
-本项目展示了：
-1. **VQ-VAE在视觉压缩中的应用**
-2. **Transformer在序列预测中的能力**
-3. **Scheduled Sampling缓解误差累积**
-4. **离散token空间的世界建模**
+- 使用与训练数据分布一致的动作范围，WASD 映射默认约为 steering ±0.4、throttle 0.42-0.65
+- 长序列生成更容易累计误差，优先尝试 Scheduled Sampling 权重
+- 通过 `--temperature` 控制采样多样性（0 为贪心）
 
 ## 📝 引用
 
@@ -256,16 +199,10 @@ tail -f logs/train_ss.log
 [待补充]
 ```
 
-## 🤝 贡献
-
-欢迎提交Issue和Pull Request！
-
 ## 📄 许可
 
 [待补充]
 
 ---
 
-**项目状态**: ✅ 所有模型已训练完成，可直接使用
-
-**最后更新**: 2026-01-13
+**最后更新**: 2026-01-16
