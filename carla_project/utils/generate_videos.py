@@ -18,6 +18,68 @@ from models.world_model import WorldModel
 from train.config import WM_CONFIG
 
 
+def wasd_to_action(key):
+    """Map WASD-like keys to action vectors."""
+    steering = 0.0
+    throttle = 0.55
+
+    key = key.upper()
+    if key == 'W':
+        steering = 0.0
+        throttle = 0.65
+    elif key == 'S':
+        steering = 0.0
+        throttle = 0.42
+    elif key == 'A':
+        steering = -0.4
+        throttle = 0.55
+    elif key == 'D':
+        steering = 0.4
+        throttle = 0.55
+    elif key == 'Q':
+        steering = -0.4
+        throttle = 0.65
+    elif key == 'E':
+        steering = 0.4
+        throttle = 0.65
+    elif key == 'N':
+        steering = 0.0
+        throttle = 0.55
+
+    return np.array([steering, throttle], dtype=np.float32)
+
+
+def load_actions_from_txt(txt_path):
+    """
+    Load actions from a txt file.
+
+    Supported formats:
+    1) WASD-like keys, one per line (W/A/S/D/Q/E/N)
+    2) Numeric lines: "<steer> <throttle>"
+    """
+    actions = []
+    with open(txt_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if len(line) == 1 and line.upper() in 'WASDQEN':
+                actions.append(wasd_to_action(line))
+                continue
+            parts = line.split()
+            if len(parts) != 2:
+                continue
+            try:
+                steering = float(parts[0])
+                throttle = float(parts[1])
+            except ValueError:
+                continue
+            actions.append([steering, throttle])
+    if len(actions) == 0:
+        raise ValueError(f"No valid actions found in {txt_path}")
+    return np.array(actions, dtype=np.float32)
+
+
 def load_models(vqvae_path, wm_path, device='cuda'):
     """加载模型"""
     print("Loading models...")
@@ -76,7 +138,8 @@ def tokens_to_image(vqvae, tokens, device):
 
 
 def generate_video(vqvae, world_model, tokens, actions, start_idx, num_frames, device,
-                   use_gt_actions=True, temperature=1.0, action_type='straight'):
+                   use_gt_actions=True, temperature=1.0, action_type='straight',
+                   action_override=None):
     """
     生成预测视频
 
@@ -91,6 +154,7 @@ def generate_video(vqvae, world_model, tokens, actions, start_idx, num_frames, d
         use_gt_actions: 是否使用真实动作（True）还是固定动作（False）
         temperature: 采样温度
         action_type: 固定动作类型 ('straight', 'left', 'right', 'smooth')
+        action_override: Optional custom action sequence (num_frames + context)
 
     Returns:
         pred_frames: 预测的帧列表
@@ -119,7 +183,9 @@ def generate_video(vqvae, world_model, tokens, actions, start_idx, num_frames, d
             context_tensor = torch.from_numpy(context_tokens).long().unsqueeze(0).to(device)
 
             # 获取动作
-            if use_gt_actions:
+            if action_override is not None:
+                action_seq = action_override[t:t + context_frames]
+            elif use_gt_actions:
                 action_seq = actions[start_idx+t:start_idx+t+context_frames]
             else:
                 # 使用固定动作
@@ -357,6 +423,8 @@ def main():
     parser.add_argument('--action-type', type=str, default='straight',
                        choices=['straight', 'left', 'right', 'smooth'],
                        help='Type of fixed action: straight/left/right/smooth')
+    parser.add_argument('--action-txt', type=str, default=None,
+                       help='Action text file (WASD or numeric format)')
 
     args = parser.parse_args()
 
@@ -386,6 +454,20 @@ def main():
 
     context_frames = world_model.context_frames
     max_start_idx = len(tokens) - context_frames - args.num_frames
+
+    action_override = None
+    if args.action_txt:
+        action_override = load_actions_from_txt(args.action_txt)
+        if action_override.ndim != 2 or action_override.shape[1] != 2:
+            raise ValueError(f"Invalid action shape from {args.action_txt}: {action_override.shape}")
+        required = args.num_frames + world_model.context_frames
+        if len(action_override) < required:
+            pad = np.repeat(action_override[-1][None], required - len(action_override), axis=0)
+            action_override = np.concatenate([action_override, pad], axis=0)
+        if args.fixed_action:
+            print("Warning: --action-txt provided, ignoring --fixed-action.")
+        if not args.prediction_only:
+            print("Warning: custom actions provided; GT comparison may be misleading.")
 
     # 生成多个视频
     print(f"Generating {args.num_videos} videos...")
@@ -419,7 +501,8 @@ def main():
             start_idx, args.num_frames, args.device,
             use_gt_actions=not args.fixed_action,
             temperature=args.temperature,
-            action_type=args.action_type
+            action_type=args.action_type,
+            action_override=action_override
         )
 
         # 保存视频
