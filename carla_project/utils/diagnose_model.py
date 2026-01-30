@@ -10,7 +10,7 @@ import torch
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from models.vqvae_v2 import VQVAE_V2
+from models.vqvae_v2 import load_vqvae_v2_checkpoint
 from models.world_model import WorldModel
 from train.config import WM_CONFIG
 
@@ -31,8 +31,9 @@ def pick_default_world_model():
 
 def pick_default_token_file():
     candidates = [
-        Path("data/tokens_v3/tokens_actions.npz"),
-        Path("data/tokens_v2/tokens_actions.npz"),
+        Path("data/tokens_action_corr_v2/tokens_actions.npz"),
+        Path("data/tokens_action_corr/tokens_actions.npz"),
+        Path("data/tokens_raw/tokens_actions.npz"),
     ]
     for path in candidates:
         if path.exists():
@@ -48,14 +49,20 @@ def diagnose_model(vqvae_path, wm_path, token_file, device='cuda'):
     print("="*70)
     print()
 
+    # 加载数据
+    print("Loading data...")
+    data = np.load(token_file)
+    tokens = data['tokens']
+    actions = data['actions']
+    num_embeddings = int(tokens.max()) + 1
+
     # 加载模型
     print("Loading models...")
-    vqvae = VQVAE_V2().to(device)
-    checkpoint = torch.load(vqvae_path, map_location=device, weights_only=False)
-    vqvae.load_state_dict(checkpoint['model_state_dict'])
+    vqvae, _ = load_vqvae_v2_checkpoint(vqvae_path, device)
     vqvae.eval()
 
-    config = WM_CONFIG
+    config = WM_CONFIG.copy()
+    config['num_embeddings'] = num_embeddings
     world_model = WorldModel(
         num_embeddings=config['num_embeddings'],
         embed_dim=config['embed_dim'],
@@ -73,12 +80,6 @@ def diagnose_model(vqvae_path, wm_path, token_file, device='cuda'):
     checkpoint = torch.load(wm_path, map_location=device, weights_only=False)
     world_model.load_state_dict(checkpoint['model_state_dict'])
     world_model.eval()
-
-    # 加载数据
-    print("Loading data...")
-    data = np.load(token_file)
-    tokens = data['tokens']
-    actions = data['actions']
 
     context_frames = world_model.context_frames
     print(f"Context frames: {context_frames}")

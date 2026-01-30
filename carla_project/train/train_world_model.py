@@ -341,6 +341,11 @@ def main():
         )
         sampler = None
 
+    # 自适应num_embeddings（与tokens文件一致）
+    config['num_embeddings'] = int(dataloader.dataset.tokens.max()) + 1
+    if is_main_process():
+        print(f"Num embeddings: {config['num_embeddings']}")
+
     # 模型
     if is_main_process():
         print("\nCreating model...")

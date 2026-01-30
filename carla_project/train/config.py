@@ -28,21 +28,21 @@ VQVAE_CONFIG = {
 
 # ============= World Model配置 =============
 WM_CONFIG = {
-    # 模型参数 (~200M params，参考业界Transformer配置)
+    # 模型参数 (A-XL 规模，单卡H200可训练)
     'num_embeddings': 1024,
-    'embed_dim': 512,        # 256 -> 512 (更大的embedding)
-    'hidden_dim': 1024,      # 512 -> 1024
-    'num_heads': 16,         # 8 -> 16
-    'num_layers': 16,        # 8 -> 16
+    'embed_dim': 1152,
+    'hidden_dim': 2304,
+    'num_heads': 18,
+    'num_layers': 32,
     'context_frames': 4,
     'action_dim': 2,
     'tokens_per_frame': 256,  # 16×16
     'dropout': 0.1,
 
     # 训练参数
-    'lr': 5e-5,              # 大模型用更小学习率
-    'epochs': 300,           # 更多epoch
-    'batch_size': 16,        # 优化为32以更好利用显存
+    'lr': 3e-5,
+    'epochs': 300,
+    'batch_size': 8,
     'num_workers': 12,
 
     # 损失权重
@@ -67,7 +67,7 @@ WM_CONFIG = {
 
     # 记忆模块
     'use_memory': True,
-    'memory_dim': 256,
+    'memory_dim': 512,
 
     # 保存
     'save_every': 5,

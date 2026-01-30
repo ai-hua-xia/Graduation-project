@@ -13,7 +13,7 @@ import argparse
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from models.vqvae_v2 import VQVAE_V2
+from models.vqvae_v2 import load_vqvae_v2_checkpoint
 from models.world_model import WorldModel
 from train.config import WM_CONFIG
 
@@ -80,18 +80,41 @@ def load_actions_from_txt(txt_path):
     return np.array(actions, dtype=np.float32)
 
 
-def load_models(vqvae_path, wm_path, device='cuda'):
+def find_best_action_windows(actions, target_actions, steer_weight=1.0, throttle_weight=1.0,
+                             stride=1, topk=1):
+    """Find top-k windows that best match the target actions (lower is better)."""
+    if topk < 1:
+        raise ValueError("topk must be >= 1")
+    total = len(actions)
+    window = len(target_actions)
+    if window > total:
+        raise ValueError("Target actions longer than dataset actions.")
+    if stride < 1:
+        raise ValueError("stride must be >= 1")
+
+    scores = []
+    for i in range(0, total - window + 1, stride):
+        diff = actions[i:i + window] - target_actions
+        diff[:, 0] *= steer_weight
+        diff[:, 1] *= throttle_weight
+        score = float(np.mean(diff * diff))
+        scores.append((score, i))
+    scores.sort(key=lambda x: x[0])
+    return scores[:topk]
+
+
+def load_models(vqvae_path, wm_path, device='cuda', num_embeddings=None):
     """加载模型"""
     print("Loading models...")
 
     # VQ-VAE
-    vqvae = VQVAE_V2().to(device)
-    checkpoint = torch.load(vqvae_path, map_location=device, weights_only=False)
-    vqvae.load_state_dict(checkpoint['model_state_dict'])
+    vqvae, _ = load_vqvae_v2_checkpoint(vqvae_path, device)
     vqvae.eval()
 
     # World Model
-    config = WM_CONFIG
+    config = WM_CONFIG.copy()
+    if num_embeddings is not None:
+        config['num_embeddings'] = num_embeddings
     world_model = WorldModel(
         num_embeddings=config['num_embeddings'],
         embed_dim=config['embed_dim'],
@@ -253,6 +276,108 @@ def generate_video(vqvae, world_model, tokens, actions, start_idx, num_frames, d
     return pred_frames, gt_frames
 
 
+def generate_video_hybrid(vqvae, world_model, tokens, actions, start_idx, num_frames, device,
+                          reset_every=12, use_gt_actions=True, temperature=1.0,
+                          action_type='straight', action_override=None):
+    """
+    生成混合视频：周期性重置上下文为真实token，减少漂移。
+    """
+    context_frames = world_model.context_frames
+
+    # 初始化上下文
+    context_tokens = tokens[start_idx:start_idx+context_frames].copy()
+
+    pred_frames = []
+    gt_frames = []
+
+    # 先解码初始上下文帧
+    for i in range(context_frames):
+        frame = tokens_to_image(vqvae, context_tokens[i], device)
+        pred_frames.append(frame)
+        gt_frames.append(frame)
+
+    # 自回归生成
+    with torch.no_grad():
+        memory = None
+        use_memory = getattr(world_model, 'use_memory', False)
+        for t in tqdm(range(num_frames), desc="Generating frames"):
+            if reset_every > 0 and t > 0 and (t % reset_every) == 0:
+                reset_start = start_idx + t - context_frames
+                reset_end = reset_start + context_frames
+                if reset_start < 0 or reset_end > len(tokens):
+                    break
+                context_tokens = tokens[reset_start:reset_end].copy()
+                if use_memory:
+                    memory = None
+
+            # 准备输入
+            context_tensor = torch.from_numpy(context_tokens).long().unsqueeze(0).to(device)
+
+            # 获取动作
+            if action_override is not None:
+                action_seq = action_override[t:t + context_frames]
+            elif use_gt_actions:
+                action_seq = actions[start_idx+t:start_idx+t+context_frames]
+            else:
+                # 使用固定动作
+                if action_type == 'straight':
+                    action_seq = np.tile(np.array([0.0, 0.5], dtype=np.float32), (context_frames, 1))
+                elif action_type == 'left':
+                    action_seq = np.tile(np.array([-0.3, 0.5], dtype=np.float32), (context_frames, 1))
+                elif action_type == 'right':
+                    action_seq = np.tile(np.array([0.3, 0.5], dtype=np.float32), (context_frames, 1))
+                elif action_type == 'smooth':
+                    progress = t / num_frames
+                    if progress < 0.33:
+                        steering = 0.0
+                    elif progress < 0.66:
+                        steering = -0.3 * ((progress - 0.33) / 0.33)
+                    else:
+                        steering = -0.3 + 0.6 * ((progress - 0.66) / 0.34)
+                    action_seq = np.tile(np.array([steering, 0.5], dtype=np.float32), (context_frames, 1))
+                else:
+                    action_seq = np.tile(np.array([0.0, 0.5], dtype=np.float32), (context_frames, 1))
+
+            action_tensor = torch.from_numpy(action_seq).float().unsqueeze(0).to(device)
+
+            # 预测下一帧
+            if use_memory:
+                logits, memory = world_model(
+                    context_tensor, action_tensor, memory=memory, return_memory=True
+                )
+            else:
+                logits = world_model(context_tensor, action_tensor)
+
+            # 采样或贪婪选择
+            if temperature > 0:
+                probs = torch.softmax(logits / temperature, dim=-1)
+                pred_tokens = torch.multinomial(probs.view(-1, probs.size(-1)), 1).view(logits.shape[:-1])
+            else:
+                pred_tokens = torch.argmax(logits, dim=-1)
+
+            pred_tokens = pred_tokens.squeeze(0).cpu().numpy()
+
+            # 解码预测帧
+            pred_frame = tokens_to_image(vqvae, pred_tokens, device)
+            pred_frames.append(pred_frame)
+
+            # 获取真实帧
+            gt_idx = start_idx + context_frames + t
+            if gt_idx < len(tokens):
+                gt_frame = tokens_to_image(vqvae, tokens[gt_idx], device)
+                gt_frames.append(gt_frame)
+            else:
+                gt_frames.append(np.zeros_like(pred_frame))
+
+            # 更新上下文（滑动窗口）
+            h = w = int(np.sqrt(len(pred_tokens)))
+            pred_tokens_2d = pred_tokens.reshape(h, w)
+            context_tokens = np.roll(context_tokens, -1, axis=0)
+            context_tokens[-1] = pred_tokens_2d
+
+    return pred_frames, gt_frames
+
+
 def create_comparison_video(pred_frames, gt_frames, output_path, fps=10):
     """创建对比视频（预测 vs 真实）"""
     import subprocess
@@ -398,12 +523,15 @@ def create_prediction_only_video(pred_frames, output_path, fps=10):
 
 def main():
     parser = argparse.ArgumentParser(description='Generate World Model prediction videos')
+    parser.add_argument('--mode', type=str, default='predict',
+                       choices=['predict', 'retrieve', 'hybrid'],
+                       help='predict: WM autoregressive; retrieve: best-match replay; hybrid: periodic reset')
     parser.add_argument('--vqvae-checkpoint', type=str,
                        default='checkpoints/vqvae_v2/best.pth')
     parser.add_argument('--world-model-checkpoint', type=str,
                        default='checkpoints/world_model_ss/best.pth')
     parser.add_argument('--token-file', type=str,
-                       default='data/tokens_v2/tokens_actions.npz')
+                       default='data/tokens_raw/tokens_actions.npz')
     parser.add_argument('--output-dir', type=str, default='results/videos')
     parser.add_argument('--num-videos', type=int, default=5,
                        help='Number of videos to generate')
@@ -425,6 +553,14 @@ def main():
                        help='Type of fixed action: straight/left/right/smooth')
     parser.add_argument('--action-txt', type=str, default=None,
                        help='Action text file (WASD or numeric format)')
+    parser.add_argument('--hybrid-reset-every', type=int, default=12,
+                       help='Reset context every N frames (hybrid mode)')
+    parser.add_argument('--match-steer-weight', type=float, default=1.0,
+                       help='Steering weight for action matching (retrieve mode)')
+    parser.add_argument('--match-throttle-weight', type=float, default=1.0,
+                       help='Throttle weight for action matching (retrieve mode)')
+    parser.add_argument('--match-stride', type=int, default=1,
+                       help='Stride for action matching window scan')
 
     args = parser.parse_args()
 
@@ -437,22 +573,31 @@ def main():
     print("="*70)
     print()
 
-    # 加载模型
-    vqvae, world_model = load_models(
-        args.vqvae_checkpoint,
-        args.world_model_checkpoint,
-        args.device
-    )
-
     # 加载数据
     print("Loading data...")
     data = np.load(args.token_file)
     tokens = data['tokens']
     actions = data['actions']
+    num_embeddings = int(tokens.max()) + 1
     print(f"Loaded {len(tokens)} frames")
+    print(f"Num embeddings: {num_embeddings}")
     print()
 
-    context_frames = world_model.context_frames
+    # 加载模型
+    if args.mode in ('predict', 'hybrid'):
+        vqvae, world_model = load_models(
+            args.vqvae_checkpoint,
+            args.world_model_checkpoint,
+            args.device,
+            num_embeddings=num_embeddings,
+        )
+        context_frames = world_model.context_frames
+    else:
+        vqvae, _ = load_vqvae_v2_checkpoint(args.vqvae_checkpoint, args.device)
+        vqvae.eval()
+        world_model = None
+        context_frames = WM_CONFIG['context_frames']
+
     max_start_idx = len(tokens) - context_frames - args.num_frames
 
     action_override = None
@@ -460,13 +605,13 @@ def main():
         action_override = load_actions_from_txt(args.action_txt)
         if action_override.ndim != 2 or action_override.shape[1] != 2:
             raise ValueError(f"Invalid action shape from {args.action_txt}: {action_override.shape}")
-        required = args.num_frames + world_model.context_frames
+        required = args.num_frames + context_frames
         if len(action_override) < required:
             pad = np.repeat(action_override[-1][None], required - len(action_override), axis=0)
             action_override = np.concatenate([action_override, pad], axis=0)
         if args.fixed_action:
             print("Warning: --action-txt provided, ignoring --fixed-action.")
-        if not args.prediction_only:
+        if not args.prediction_only and args.mode == 'predict':
             print("Warning: custom actions provided; GT comparison may be misleading.")
 
     # 生成多个视频
@@ -474,41 +619,86 @@ def main():
     print()
 
     # 确定起始位置
-    if args.start_idx is not None:
-        # 使用固定起始位置
-        if args.start_idx < 0 or args.start_idx > max_start_idx:
-            print(f"Warning: start_idx {args.start_idx} out of range [0, {max_start_idx}]")
-            print(f"Using random start index instead")
-            start_indices = [np.random.randint(0, max_start_idx) for _ in range(args.num_videos)]
-        else:
-            # 所有视频使用相同的起始位置
+    match_scores = None
+    if args.mode in ('retrieve', 'hybrid'):
+        if args.start_idx is None and action_override is None:
+            raise ValueError("retrieve/hybrid mode requires --action-txt or --start-idx")
+        if args.start_idx is not None:
             start_indices = [args.start_idx] * args.num_videos
             print(f"Using fixed start index: {args.start_idx}")
+        else:
+            matches = find_best_action_windows(
+                actions,
+                action_override[:args.num_frames + context_frames],
+                steer_weight=args.match_steer_weight,
+                throttle_weight=args.match_throttle_weight,
+                stride=args.match_stride,
+                topk=args.num_videos,
+            )
+            start_indices = [idx for _, idx in matches]
+            match_scores = [score for score, _ in matches]
+            print("Using best-matched start indices:", start_indices)
     else:
-        # 随机选择起始位置
-        start_indices = [np.random.randint(0, max_start_idx) for _ in range(args.num_videos)]
-        print(f"Using random start indices")
+        if args.start_idx is not None:
+            # 使用固定起始位置
+            if args.start_idx < 0 or args.start_idx > max_start_idx:
+                print(f"Warning: start_idx {args.start_idx} out of range [0, {max_start_idx}]")
+                print(f"Using random start index instead")
+                start_indices = [np.random.randint(0, max_start_idx) for _ in range(args.num_videos)]
+            else:
+                # 所有视频使用相同的起始位置
+                start_indices = [args.start_idx] * args.num_videos
+                print(f"Using fixed start index: {args.start_idx}")
+        else:
+            # 随机选择起始位置
+            start_indices = [np.random.randint(0, max_start_idx) for _ in range(args.num_videos)]
+            print(f"Using random start indices")
     print()
 
     for i in range(args.num_videos):
         start_idx = start_indices[i]
 
         print(f"Video {i+1}/{args.num_videos} (starting from frame {start_idx})...")
+        if match_scores is not None:
+            print(f"  Match score: {match_scores[i]:.6f}")
 
-        # 生成预测
-        pred_frames, gt_frames = generate_video(
-            vqvae, world_model, tokens, actions,
-            start_idx, args.num_frames, args.device,
-            use_gt_actions=not args.fixed_action,
-            temperature=args.temperature,
-            action_type=args.action_type,
-            action_override=action_override
-        )
+        if args.mode == 'retrieve':
+            total_frames = context_frames + args.num_frames
+            pred_frames = []
+            for t in range(total_frames):
+                frame_idx = start_idx + t
+                if frame_idx >= len(tokens):
+                    break
+                pred_frames.append(tokens_to_image(vqvae, tokens[frame_idx], args.device))
+            output_path = output_dir / f'retrieval_{i+1:02d}_idx{start_idx}.mp4'
+            create_prediction_only_video(pred_frames, output_path, args.fps)
+            print()
+            continue
+
+        if args.mode == 'hybrid':
+            pred_frames, gt_frames = generate_video_hybrid(
+                vqvae, world_model, tokens, actions,
+                start_idx, args.num_frames, args.device,
+                reset_every=args.hybrid_reset_every,
+                use_gt_actions=not args.fixed_action,
+                temperature=args.temperature,
+                action_type=args.action_type,
+                action_override=action_override
+            )
+        else:
+            pred_frames, gt_frames = generate_video(
+                vqvae, world_model, tokens, actions,
+                start_idx, args.num_frames, args.device,
+                use_gt_actions=not args.fixed_action,
+                temperature=args.temperature,
+                action_type=args.action_type,
+                action_override=action_override
+            )
 
         # 保存视频
         output_path = output_dir / f'prediction_{i+1:02d}.mp4'
 
-        if args.prediction_only:
+        if args.prediction_only or args.mode == 'hybrid':
             # 纯预测模式：只显示预测帧
             create_prediction_only_video(pred_frames, output_path, args.fps)
         else:

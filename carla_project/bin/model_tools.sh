@@ -5,16 +5,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 pick_token_file() {
-    if [ -f "data/tokens_v3/tokens_actions.npz" ]; then
-        echo "data/tokens_v3/tokens_actions.npz"
+    if [ -f "data/tokens_action_corr_v2/tokens_actions.npz" ]; then
+        echo "data/tokens_action_corr_v2/tokens_actions.npz"
     else
-        echo "data/tokens_v2/tokens_actions.npz"
+        echo "data/tokens_raw/tokens_actions.npz"
+    fi
+}
+
+pick_vqvae_checkpoint() {
+    if [ -f "checkpoints/vqvae_action_corr_v2/best.pth" ]; then
+        echo "checkpoints/vqvae_action_corr_v2/best.pth"
+    elif [ -f "checkpoints/vqvae_action_corr/best.pth" ]; then
+        echo "checkpoints/vqvae_action_corr/best.pth"
+    else
+        echo "checkpoints/vqvae_v2/best.pth"
     fi
 }
 
 pick_world_model_checkpoint() {
-    if [ -f "checkpoints/world_model_v4_ss/best.pth" ]; then
-        echo "checkpoints/world_model_v4_ss/best.pth"
+    if [ -f "checkpoints/world_model_v5_ss_fast/best.pth" ]; then
+        echo "checkpoints/world_model_v5_ss_fast/best.pth"
+    elif [ -f "checkpoints/world_model_v5_ss/best.pth" ]; then
+        echo "checkpoints/world_model_v5_ss/best.pth"
+    elif [ -f "checkpoints/world_model_v5/best.pth" ]; then
+        echo "checkpoints/world_model_v5/best.pth"
+    elif [ -f "checkpoints/world_model_v4_ss_e029/best.pth" ]; then
+        echo "checkpoints/world_model_v4_ss_e029/best.pth"
     elif [ -f "checkpoints/world_model_v4/best.pth" ]; then
         echo "checkpoints/world_model_v4/best.pth"
     elif [ -f "checkpoints/world_model_v3_ss/best.pth" ]; then
@@ -47,7 +63,7 @@ Examples:
   $0 status           # 查看训练进度
   $0 eval             # 评估当前模型
   $0 video 30         # 生成30帧对比视频（随机场景）
-  $0 video 100 1990   # 生成100帧对比视频（最连续场景）
+  $0 video 100 1990   # 生成100帧对比视频（使用连续片段起点）
   $0 video 100 1990 --pred-only  # 生成100帧纯预测视频
   $0 dream actions.txt  # 使用WASD动作文件生成视频（推荐）
   $0 dream actions.txt --show-controls  # 显示按键指示器
@@ -58,7 +74,7 @@ Examples:
 Note:
   --pred-only: 只显示预测帧，不显示Ground Truth对比
   dream命令: 使用WASD动作文件，完全自回归生成，场景最连续
-  推荐起始位置: 1990 (数据集中最连续的100帧片段)
+  start_idx: 建议选择数据集中连续片段的起点（可按采样情况调整）
 
 ========================================
 EOF
@@ -69,6 +85,30 @@ cmd_status() {
     echo "  Training Status"
     echo "=========================================="
     echo ""
+
+    # World Model v5
+    if [ -f "logs/train_world_model_v5.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_world_model_v5.log | tail -1)
+        echo "📊 World Model v5: $latest_epoch"
+        grep -A 4 "^Epoch [0-9]\+:$" logs/train_world_model_v5.log | tail -15 | grep -E "(Epoch|Loss|CE|Smooth|Contrast|Weight)" | tail -12
+        echo ""
+    fi
+
+    # Scheduled Sampling v5
+    if [ -f "logs/train_world_model_v5_ss.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_world_model_v5_ss.log | tail -1)
+        echo "📊 Scheduled Sampling v5: $latest_epoch"
+        grep -A 3 "^Epoch [0-9]\+:$" logs/train_world_model_v5_ss.log | tail -12 | grep -E "(Epoch|Loss|CE|Contrast|Sampling)" | tail -9
+        echo ""
+    fi
+
+    # Scheduled Sampling v5 (fast)
+    if [ -f "logs/train_world_model_v5_ss_fast.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_world_model_v5_ss_fast.log | tail -1)
+        echo "📊 Scheduled Sampling v5 (fast): $latest_epoch"
+        grep -A 3 "^Epoch [0-9]\+:$" logs/train_world_model_v5_ss_fast.log | tail -12 | grep -E "(Epoch|Loss|CE|Contrast|Sampling)" | tail -9
+        echo ""
+    fi
 
     # World Model v4
     if [ -f "logs/train_wm_v4.log" ]; then
@@ -130,7 +170,7 @@ cmd_eval() {
     echo ""
 
     # 检查文件是否存在
-    VQVAE_CHECKPOINT="checkpoints/vqvae_v2/best.pth"
+    VQVAE_CHECKPOINT="$(pick_vqvae_checkpoint)"
     WM_CHECKPOINT="$(pick_world_model_checkpoint)"
     TOKEN_FILE="$(pick_token_file)"
 
@@ -184,7 +224,7 @@ cmd_diagnose() {
     local token_file="$(pick_token_file)"
 
     python utils/diagnose_model.py \
-        --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+        --vqvae-checkpoint "$(pick_vqvae_checkpoint)" \
         --world-model-checkpoint "$wm_checkpoint" \
         --token-file "$token_file" \
         --device cuda
@@ -234,7 +274,7 @@ cmd_video() {
 
     if [ -n "$start_idx" ]; then
         python utils/generate_videos.py \
-            --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+            --vqvae-checkpoint "$(pick_vqvae_checkpoint)" \
             --world-model-checkpoint "$wm_checkpoint" \
             --token-file "$token_file" \
             --output-dir outputs/videos \
@@ -246,7 +286,7 @@ cmd_video() {
             $pred_only_flag
     else
         python utils/generate_videos.py \
-            --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+            --vqvae-checkpoint "$(pick_vqvae_checkpoint)" \
             --world-model-checkpoint "$wm_checkpoint" \
             --token-file "$token_file" \
             --output-dir outputs/videos \
@@ -325,7 +365,7 @@ cmd_dream() {
     local token_file="$(pick_token_file)"
 
     python visualize/dream.py \
-        --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
+        --vqvae-checkpoint "$(pick_vqvae_checkpoint)" \
         --world-model-checkpoint "$wm_checkpoint" \
         --token-file "$token_file" \
         --action-txt "$action_file" \

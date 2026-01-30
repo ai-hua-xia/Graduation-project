@@ -7,16 +7,15 @@
 | 脚本 | 功能 | 备注 |
 |------|------|------|
 | **model_tools.sh** | 🌟 统一工具入口 | 推荐主入口，提供 status/eval/video/dream/diagnose/analyze/figures |
+| run_collect_10.sh | 10 端口并行采集（Phase A/B） | 推荐用于批量采集 |
 | start_carla_server.sh | 启动 CARLA 服务器 | 默认使用 `~/CARLA_0.9.16`，参考 `INSTALL_SERVER.md` |
 | setup_env.sh | 环境检查与依赖提示 | 依赖本机 conda 环境 `voyager` |
 | activate.sh | 快速进入工作环境 | 含硬编码路径，可按需修改 |
-| test_wasd.sh | WASD 测试脚本 | 旧路径写法，建议使用 `model_tools.sh dream` |
 
 ### `collect/` - 数据采集
 
 | 脚本 | 功能 |
 |------|------|
-| collect_data.py | 基础采集（Town03，固定参数） |
 | collect_data_action_correlated.py | 动作相关性采集（可配置） |
 | verify_data_action_focused.py | 采集质量验证 |
 | utils.py | 采集辅助函数 |
@@ -28,7 +27,6 @@
 | train_vqvae_v2.py | 训练 VQ-VAE v2 |
 | train_world_model.py | 训练 World Model（Teacher Forcing） |
 | train_world_model_ss.py | 训练 Scheduled Sampling 版本 |
-| train_vqvae.py | 旧版本 VQ-VAE（保留） |
 
 ### `evaluate/` - 评估
 
@@ -43,13 +41,11 @@
 | 脚本 | 功能 |
 |------|------|
 | dream.py | WASD 动作序列生成视频 |
-| compare_video.py | 视频对比工具 |
 
 ### `tools/` - 分析工具（4个）
 
 | 工具 | 功能 |
 |------|------|
-| analyze_action_data.py | 动作分布分析 |
 | analyze_ss_training.py | SS 训练分析 |
 | analyze_video_quality.py | 视频质量衰减分析 |
 | training_roadmap.py | 训练路线图/记录 |
@@ -70,11 +66,12 @@
 
 ```
 data/
-├── raw/                 # 基础采集数据
-├── raw_action_corr_v1/  # 动作相关性 v1
-├── raw_action_corr_v2/  # 动作相关性 v2
-├── tokens_v2/           # tokens_actions.npz
-└── tokens_v3/           # tokens_actions.npz
+├── raw/               # 基础采集数据
+├── raw_action_corr_v2/    # 动作相关性（旧版）
+├── raw_action_corr_v3/    # 动作相关性（当前主用）
+├── tokens_raw/            # tokens_actions.npz
+├── tokens_action_corr_v2/ # tokens_actions.npz
+└── tokens_action_corr_f8/ # tokens_actions.npz（可选，f=8）
 ```
 
 ### `checkpoints/` - 模型权重
@@ -82,11 +79,13 @@ data/
 ```
 checkpoints/
 ├── vqvae_v2/
-├── world_model_v2/
-├── world_model_v2_ss/
-├── world_model_v3/
+├── vqvae_action_corr_v2/
+└── vqvae_action_corr_f8/   # 可选 f=8
 ├── world_model_v4/
-└── world_model_v4_ss_e029/
+├── world_model_v4_ss_e029/
+├── world_model_v5/
+├── world_model_v5_ss/
+└── world_model_v5_ss_fast/
 ```
 
 ### `outputs/` - 输出目录
@@ -137,4 +136,15 @@ outputs/
 
 ---
 
-**最后更新**: 2026-01-16
+### `legacy/` - 历史脚本（实验留存）
+
+| 目录 | 文件 |
+|------|------|
+| legacy/bin | test_wasd.sh |
+| legacy/collect | collect_data.py |
+| legacy/train | train_vqvae.py |
+| legacy/models | vqvae.py |
+| legacy/visualize | compare_video.py |
+| legacy/tools | analyze_action_data.py |
+
+**最后更新**: 2026-01-29

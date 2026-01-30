@@ -11,7 +11,7 @@ import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from models.vqvae_v2 import VQVAE_V2
+from models.vqvae_v2 import load_vqvae_v2_checkpoint
 from models.world_model import WorldModel
 from train.config import WM_CONFIG
 
@@ -325,15 +325,15 @@ def generate_video(vqvae, world_model, initial_frames, actions, device, output_p
     return frames
 
 
-def load_models(vqvae_path, world_model_path, device):
+def load_models(vqvae_path, world_model_path, device, num_embeddings=None):
     """加载模型"""
     # VQ-VAE v2
-    vqvae = VQVAE_V2().to(device)
-    checkpoint = torch.load(vqvae_path, map_location=device)
-    vqvae.load_state_dict(checkpoint['model_state_dict'])
+    vqvae, _ = load_vqvae_v2_checkpoint(vqvae_path, device)
 
     # World Model
-    config = WM_CONFIG
+    config = WM_CONFIG.copy()
+    if num_embeddings is not None:
+        config['num_embeddings'] = num_embeddings
     world_model = WorldModel(
         num_embeddings=config['num_embeddings'],
         embed_dim=config['embed_dim'],
@@ -382,19 +382,21 @@ def main():
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # 加载模型
-    print("\nLoading models...")
-    vqvae, world_model = load_models(
-        args.vqvae_checkpoint,
-        args.world_model_checkpoint,
-        device
-    )
-
     # 加载初始帧和动作
     print("\nLoading data...")
     data = np.load(args.token_file)
     tokens = data['tokens']  # (N, H, W)
     actions = data['actions']  # (N, action_dim)
+    num_embeddings = int(tokens.max()) + 1
+
+    # 加载模型
+    print("\nLoading models...")
+    vqvae, world_model = load_models(
+        args.vqvae_checkpoint,
+        args.world_model_checkpoint,
+        device,
+        num_embeddings=num_embeddings,
+    )
 
     context_frames = world_model.context_frames
 

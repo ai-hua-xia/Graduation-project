@@ -7,7 +7,7 @@
 本项目实现了一个端到端的世界模型系统，能够根据驾驶动作预测未来的视觉场景，并支持生成对比视频与 WASD 动作序列的“梦境”视频。
 
 **核心技术**：
-- **VQ-VAE v2**: 256×256 图像压缩为 16×16 离散 tokens
+- **VQ-VAE v2/v3**: 256×256 图像压缩为 16×16 离散 tokens（f=16，默认）；可选 f=8（32×32）
 - **Transformer World Model**: 基于历史帧与动作预测下一帧
 - **Scheduled Sampling**: 缓解自回归生成误差累积
 - **WASD 控制**: 支持文本文件输入动作序列
@@ -16,17 +16,19 @@
 
 | 模块 | 现状 | 说明 |
 |------|------|------|
-| 数据集 | ✅ 已就绪 | `data/raw`、`data/raw_action_corr_v1`、`data/raw_action_corr_v2` |
-| Tokens | ✅ 已就绪 | `data/tokens_v2/tokens_actions.npz`、`data/tokens_v3/tokens_actions.npz` |
-| VQ-VAE | ✅ v2 checkpoint | `checkpoints/vqvae_v2/best.pth` |
-| World Model | ✅ 多版本 | `checkpoints/world_model_v2`、`world_model_v3`、`world_model_v4` |
-| Scheduled Sampling | ✅ 有可用权重 | `checkpoints/world_model_v2_ss`、`world_model_v4_ss_e029` |
-| 工具脚本 | ✅ 已统一 | `bin/model_tools.sh` 支持 status/eval/video/dream/diagnose/analyze/figures |
+| 数据集 | ✅ 已就绪 | `data/raw`、`data/raw_action_corr_v2`、`data/raw_action_corr_v3` |
+| Tokens | ✅ 已就绪 | `data/tokens_action_corr_v2/tokens_actions.npz`、`data/tokens_raw/tokens_actions.npz`（可选：`data/tokens_action_corr_f8/tokens_actions.npz`） |
+| VQ-VAE | ✅ v3 checkpoint | `checkpoints/vqvae_action_corr_v2/best.pth`（兼容 `vqvae_v2`；可选：`checkpoints/vqvae_action_corr_f8/best.pth`） |
+| World Model | ✅ v5 系列 | `checkpoints/world_model_v5`、`world_model_v5_ss`、`world_model_v5_ss_fast` |
+| Scheduled Sampling | ✅ 有可用权重 | `checkpoints/world_model_v5_ss`、`world_model_v5_ss_fast`、`world_model_v4_ss_e029` |
+| 工具脚本 | ✅ 已统一 | `bin/model_tools.sh` + `bin/run_collect_10.sh`（10 端口并行采集） |
 
 **自动选择规则（model_tools.sh）**：
-- Token 文件：优先 `data/tokens_v3/tokens_actions.npz`，否则使用 `data/tokens_v2/tokens_actions.npz`
-- World Model checkpoint：`world_model_v4_ss` → `world_model_v4` → `world_model_v3_ss` → `world_model_v3` → `world_model_ss`
-- 当前仓库没有 `checkpoints/world_model_v4_ss` 目录，如需使用 `world_model_v4_ss_e029` 请手动指定路径
+- Token 文件：优先 `data/tokens_action_corr_v2/tokens_actions.npz`，否则使用 `data/tokens_raw/tokens_actions.npz`
+- VQ-VAE：优先 `checkpoints/vqvae_action_corr_v2/best.pth`，否则回退到 `checkpoints/vqvae_v2/best.pth`
+- World Model checkpoint：`world_model_v5_ss_fast` → `world_model_v5_ss` → `world_model_v5` → `world_model_v4_ss_e029` → `world_model_v4` → `world_model_v3` → `world_model_ss`
+
+> 注：f=8（32×32 tokens）需要手动指定 `vqvae_action_corr_f8` 与 `tokens_action_corr_f8`，不会自动选择。
 
 ## 🚀 快速开始
 
@@ -57,9 +59,9 @@
 #### 方式1: 生成预测视频
 ```bash
 python utils/generate_videos.py \
-    --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
-    --world-model-checkpoint checkpoints/world_model_v4/best.pth \
-    --token-file data/tokens_v3/tokens_actions.npz \
+    --vqvae-checkpoint checkpoints/vqvae_action_corr_v2/best.pth \
+    --world-model-checkpoint checkpoints/world_model_v5_ss_fast/best.pth \
+    --token-file data/tokens_action_corr_v2/tokens_actions.npz \
     --output-dir outputs/videos \
     --num-videos 1 \
     --num-frames 150 \
@@ -71,14 +73,28 @@ python utils/generate_videos.py \
 #### 方式2: 评估模型
 ```bash
 python evaluate/evaluate_world_model.py \
-    --vqvae-checkpoint checkpoints/vqvae_v2/best.pth \
-    --world-model-checkpoint checkpoints/world_model_v4/best.pth \
-    --token-file data/tokens_v3/tokens_actions.npz \
+    --vqvae-checkpoint checkpoints/vqvae_action_corr_v2/best.pth \
+    --world-model-checkpoint checkpoints/world_model_v5_ss_fast/best.pth \
+    --token-file data/tokens_action_corr_v2/tokens_actions.npz \
     --output outputs/evaluations/eval.json \
     --num-samples 100 \
     --num-sequences 10 \
     --sequence-length 50 \
     --device cuda
+```
+
+#### 可选：训练 f=8 VQ-VAE（更高分辨率 token）
+```bash
+python train/train_vqvae_v3.py \
+    --data-path data/raw_action_corr_v3 \
+    --save-dir checkpoints/vqvae_action_corr_f8 \
+    --downsample-factor 8 \
+    --batch-size 32
+
+python utils/export_tokens_v2.py \
+    --data-path data/raw_action_corr_v3 \
+    --vqvae-checkpoint checkpoints/vqvae_action_corr_f8/best.pth \
+    --output data/tokens_action_corr_f8/tokens_actions.npz
 ```
 
 ## 🎮 WASD 键盘控制
@@ -132,25 +148,32 @@ carla_project/
 │   └── figures/
 ├── checkpoints/           # 已训练模型
 │   ├── vqvae_v2/
-│   ├── world_model_v2/
-│   ├── world_model_v2_ss/
-│   ├── world_model_v3/
+│   ├── vqvae_action_corr_v2/
+│   └── vqvae_action_corr_f8/   # 可选 f=8
 │   ├── world_model_v4/
-│   └── world_model_v4_ss_e029/
+│   ├── world_model_v4_ss_e029/
+│   ├── world_model_v5/
+│   ├── world_model_v5_ss/
+│   └── world_model_v5_ss_fast/
 ├── data/                  # 数据与 tokens
 │   ├── raw/
-│   ├── raw_action_corr_v1/
 │   ├── raw_action_corr_v2/
-│   ├── tokens_v2/
-│   └── tokens_v3/
+│   ├── raw_action_corr_v3/
+│   ├── tokens_raw/
+│   ├── tokens_action_corr_v2/
+│   └── tokens_action_corr_f8/  # 可选 f=8
 └── docs/                  # 📚 文档
 ```
 
+## 🗃️ Legacy 脚本
+
+历史脚本已归档到 `legacy/`（保留实验记录，不再作为主流程使用）。
+
 ## 🧠 模型与数据配置
 
-- **VQ-VAE v2**: codebook 1024 × 256，256×256 → 16×16 tokens（见 `train/train_vqvae_v2.py`）
-- **World Model**: 16 层 Transformer、16 heads、context=4（见 `train/config.py`）
-- **数据集**: `data/raw` 为基础采集，`data/raw_action_corr_v1/v2` 为动作相关性采集版本
+- **VQ-VAE v2**: codebook 1024 × 256，256×256 → 16×16 tokens（可选 f=8 → 32×32；见 `train/train_vqvae_v2.py` / `train/train_vqvae_v3.py`）
+- **World Model**: A-XL 规模（32 层、18 heads、context=4，详见 `train/config.py`）
+- **数据集**: `data/raw` 为基础采集，`data/raw_action_corr_v3` 为动作相关性采集版本
 
 ## 🔧 常用命令
 

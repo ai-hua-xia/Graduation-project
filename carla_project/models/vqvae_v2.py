@@ -7,6 +7,7 @@ VQ-VAE V2 - 改进版本，解决codebook collapse问题
 3. 可选的感知损失 - 提升视觉质量
 """
 
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -197,76 +198,65 @@ class ResidualBlock(nn.Module):
 
 
 class Encoder(nn.Module):
-    """编码器: 256x256 -> 16x16"""
-    def __init__(self, in_channels=3, base_channels=128, embed_dim=256):
+    """编码器: 256x256 -> 16x16 (可配置为8x降采样)"""
+    def __init__(self, in_channels=3, base_channels=128, embed_dim=256, num_downsamples=4):
         super().__init__()
+        if num_downsamples < 3:
+            raise ValueError("num_downsamples must be >= 3")
 
-        self.layers = nn.Sequential(
-            # 256 -> 128
-            nn.Conv2d(in_channels, base_channels, 4, stride=2, padding=1),
-            nn.SiLU(),
-            ResidualBlock(base_channels, base_channels),
-            ResidualBlock(base_channels, base_channels),
+        layers = []
+        # 256 -> 128
+        layers.append(nn.Conv2d(in_channels, base_channels, 4, stride=2, padding=1))
+        layers.append(nn.SiLU())
+        layers.append(ResidualBlock(base_channels, base_channels))
+        layers.append(ResidualBlock(base_channels, base_channels))
 
-            # 128 -> 64
-            nn.Conv2d(base_channels, base_channels * 2, 4, stride=2, padding=1),
-            nn.SiLU(),
-            ResidualBlock(base_channels * 2, base_channels * 2),
-            ResidualBlock(base_channels * 2, base_channels * 2),
+        # 后续下采样
+        for stage in range(1, num_downsamples):
+            in_ch = base_channels if stage == 1 else base_channels * 2
+            out_ch = base_channels * 2
+            layers.append(nn.Conv2d(in_ch, out_ch, 4, stride=2, padding=1))
+            layers.append(nn.SiLU())
+            layers.append(ResidualBlock(out_ch, out_ch))
+            layers.append(ResidualBlock(out_ch, out_ch))
 
-            # 64 -> 32
-            nn.Conv2d(base_channels * 2, base_channels * 2, 4, stride=2, padding=1),
-            nn.SiLU(),
-            ResidualBlock(base_channels * 2, base_channels * 2),
-            ResidualBlock(base_channels * 2, base_channels * 2),
-
-            # 32 -> 16
-            nn.Conv2d(base_channels * 2, base_channels * 2, 4, stride=2, padding=1),
-            nn.SiLU(),
-            ResidualBlock(base_channels * 2, base_channels * 2),
-            ResidualBlock(base_channels * 2, base_channels * 2),
-
-            # 投影到embedding维度
-            nn.Conv2d(base_channels * 2, embed_dim, 1),
-        )
+        # 投影到embedding维度
+        layers.append(nn.Conv2d(base_channels * 2, embed_dim, 1))
+        self.layers = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.layers(x)
 
 
 class Decoder(nn.Module):
-    """解码器: 16x16 -> 256x256"""
-    def __init__(self, embed_dim=256, base_channels=128, out_channels=3):
+    """解码器: 16x16 -> 256x256 (可配置为32x32 -> 256x256)"""
+    def __init__(self, embed_dim=256, base_channels=128, out_channels=3, num_upsamples=4):
         super().__init__()
+        if num_upsamples < 3:
+            raise ValueError("num_upsamples must be >= 3")
 
-        self.layers = nn.Sequential(
-            # 投影
-            nn.Conv2d(embed_dim, base_channels * 2, 1),
+        layers = []
+        # 投影
+        layers.append(nn.Conv2d(embed_dim, base_channels * 2, 1))
 
-            # 16 -> 32
-            ResidualBlock(base_channels * 2, base_channels * 2),
-            ResidualBlock(base_channels * 2, base_channels * 2),
-            nn.ConvTranspose2d(base_channels * 2, base_channels * 2, 4, stride=2, padding=1),
-            nn.SiLU(),
+        current_ch = base_channels * 2
+        for stage in range(num_upsamples):
+            layers.append(ResidualBlock(current_ch, current_ch))
+            layers.append(ResidualBlock(current_ch, current_ch))
 
-            # 32 -> 64
-            ResidualBlock(base_channels * 2, base_channels * 2),
-            ResidualBlock(base_channels * 2, base_channels * 2),
-            nn.ConvTranspose2d(base_channels * 2, base_channels * 2, 4, stride=2, padding=1),
-            nn.SiLU(),
+            if stage == num_upsamples - 1:
+                layers.append(nn.ConvTranspose2d(current_ch, out_channels, 4, stride=2, padding=1))
+                layers.append(nn.Tanh())
+            else:
+                if stage < num_upsamples - 2:
+                    next_ch = base_channels * 2
+                else:
+                    next_ch = base_channels
+                layers.append(nn.ConvTranspose2d(current_ch, next_ch, 4, stride=2, padding=1))
+                layers.append(nn.SiLU())
+                current_ch = next_ch
 
-            # 64 -> 128
-            ResidualBlock(base_channels * 2, base_channels * 2),
-            ResidualBlock(base_channels * 2, base_channels * 2),
-            nn.ConvTranspose2d(base_channels * 2, base_channels, 4, stride=2, padding=1),
-            nn.SiLU(),
-
-            # 128 -> 256
-            ResidualBlock(base_channels, base_channels),
-            ResidualBlock(base_channels, base_channels),
-            nn.ConvTranspose2d(base_channels, out_channels, 4, stride=2, padding=1),
-            nn.Tanh(),  # 输出范围[-1, 1]
-        )
+        self.layers = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.layers(x)
@@ -290,14 +280,21 @@ class VQVAE_V2(nn.Module):
         num_embeddings=1024,
         commitment_cost=0.25,
         ema_decay=0.99,
+        downsample_factor=16,
     ):
         super().__init__()
+        if downsample_factor <= 0:
+            raise ValueError("downsample_factor must be positive")
+        num_downsamples = int(round(math.log2(downsample_factor)))
+        if 2 ** num_downsamples != downsample_factor:
+            raise ValueError("downsample_factor must be a power of 2 (e.g., 8, 16)")
 
-        self.encoder = Encoder(in_channels, base_channels, embed_dim)
+        self.downsample_factor = downsample_factor
+        self.encoder = Encoder(in_channels, base_channels, embed_dim, num_downsamples=num_downsamples)
         self.quantizer = VectorQuantizerEMA(
             num_embeddings, embed_dim, commitment_cost, decay=ema_decay
         )
-        self.decoder = Decoder(embed_dim, base_channels, in_channels)
+        self.decoder = Decoder(embed_dim, base_channels, in_channels, num_upsamples=num_downsamples)
 
     def forward(self, x):
         """
@@ -307,7 +304,7 @@ class VQVAE_V2(nn.Module):
         Returns:
             recon: 重建图像
             vq_loss: VQ损失
-            indices: token索引 (B, 16, 16)
+            indices: token索引 (B, H, W)
             perplexity: 困惑度
         """
         z = self.encoder(x)
@@ -339,3 +336,36 @@ class VQVAE_V2(nn.Module):
     def get_codebook_usage(self):
         """获取codebook使用统计"""
         return self.quantizer.get_codebook_usage()
+
+
+def infer_vqvae_v2_config(state_dict, downsample_factor=16):
+    """Infer VQ-VAE V2 config from a checkpoint state dict."""
+    base_channels = state_dict['encoder.layers.0.weight'].shape[0]
+    num_embeddings, embed_dim = state_dict['quantizer.embedding.weight'].shape
+    return base_channels, embed_dim, num_embeddings, downsample_factor
+
+
+def build_vqvae_v2_from_state_dict(state_dict, downsample_factor=16):
+    """Build a VQ-VAE V2 model that matches a checkpoint state dict."""
+    base_channels, embed_dim, num_embeddings, downsample_factor = infer_vqvae_v2_config(
+        state_dict, downsample_factor=downsample_factor
+    )
+    model = VQVAE_V2(
+        in_channels=3,
+        base_channels=base_channels,
+        embed_dim=embed_dim,
+        num_embeddings=num_embeddings,
+        downsample_factor=downsample_factor,
+    )
+    model.load_state_dict(state_dict, strict=True)
+    return model
+
+
+def load_vqvae_v2_checkpoint(checkpoint_path, device):
+    """Load a VQ-VAE V2 checkpoint and return (model, checkpoint)."""
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    state_dict = checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint
+    downsample_factor = checkpoint.get('downsample_factor', 16) if isinstance(checkpoint, dict) else 16
+    model = build_vqvae_v2_from_state_dict(state_dict, downsample_factor=downsample_factor)
+    model.to(device)
+    return model, checkpoint

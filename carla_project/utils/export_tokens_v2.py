@@ -11,7 +11,7 @@ import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from models.vqvae_v2 import VQVAE_V2
+from models.vqvae_v2 import load_vqvae_v2_checkpoint
 from collect.utils import load_actions
 import cv2
 
@@ -44,7 +44,7 @@ def main():
     parser.add_argument('--vqvae-checkpoint', type=str,
                         default='../checkpoints/vqvae_v2/best.pth',
                         help='Path to VQ-VAE V2 checkpoint')
-    parser.add_argument('--output', type=str, default='../data/tokens_v2/tokens_actions.npz',
+    parser.add_argument('--output', type=str, default='../data/tokens_raw/tokens_actions.npz',
                         help='Output file path')
     parser.add_argument('--device', type=str, default='cuda',
                         help='Device to use')
@@ -56,18 +56,15 @@ def main():
 
     # 加载VQ-VAE V2
     print("\nLoading VQ-VAE V2...")
-    model = VQVAE_V2(
-        in_channels=3,
-        base_channels=128,
-        embed_dim=256,
-        num_embeddings=1024,
-    ).to(device)
-
-    checkpoint = torch.load(args.vqvae_checkpoint, map_location=device, weights_only=False)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model, checkpoint = load_vqvae_v2_checkpoint(args.vqvae_checkpoint, device)
     model.eval()
 
-    print(f"Loaded model from epoch {checkpoint['epoch']}, loss {checkpoint['loss']:.4f}")
+    if 'epoch' in checkpoint and 'loss' in checkpoint:
+        print(f"Loaded model from epoch {checkpoint['epoch']}, loss {checkpoint['loss']:.4f}")
+    else:
+        print("Loaded model from checkpoint.")
+    downsample_factor = checkpoint.get('downsample_factor', getattr(model, 'downsample_factor', 16))
+    print(f"Downsample factor: {downsample_factor}")
 
     # 收集所有episode
     data_path = Path(args.data_path)
@@ -129,6 +126,7 @@ def main():
         tokens=all_tokens,
         actions=all_actions,
         episode_ids=all_episode_ids,
+        downsample_factor=downsample_factor,
     )
 
     print(f"\nSaved to {output_path}")

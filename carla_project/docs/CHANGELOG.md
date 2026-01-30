@@ -1,5 +1,32 @@
 # 变更日志
 
+## 2026-01-30
+
+### ✅ VQ-VAE f=8（32×32 tokens）支持
+- VQ-VAE 支持可配置 downsample_factor（默认 16，新增 8）
+- 训练脚本支持 `--downsample-factor` 并在 checkpoint 中记录该参数
+- tokens 导出将 downsample_factor 写入 npz（与 f=16 并行共存）
+- 文档补充 f=8 训练与 tokens 导出示例
+
+## 2026-01-29
+
+### ✅ 并行采集与数据集升级
+- 新增 10 端口并行采集脚本 `bin/run_collect_10.sh`（Phase A/B 分布）
+- 新动作相关性数据集：`data/raw_action_corr_v3`
+- 采集脚本增加连接重试/超时配置（client-timeout / connect-retries）
+- 采集质量约束保持：collision / lane / stuck 过滤与预览视频输出
+
+### ✅ 模型与训练进度同步
+- VQ-VAE v3 训练输出到 `checkpoints/vqvae_action_corr_v2`
+- Tokens 固定为 `data/tokens_action_corr_v2/tokens_actions.npz`
+- World Model v5 + Scheduled Sampling v5/v5_fast 产出
+- `train/config.py` 已更新到 A-XL 配置（32层/18heads）
+
+### ✅ 工具与文档更新
+- `bin/model_tools.sh` 默认优先选择 v5/v5_ss_fast 与 vqvae_action_corr_v2
+- README/QUICKSTART/PROJECT_STRUCTURE 对齐最新数据与脚本
+- 旧版脚本归档到 `legacy/`（保留实验记录）
+
 ## 2026-01-16
 
 ### ✅ 文档同步

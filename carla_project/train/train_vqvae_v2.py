@@ -23,6 +23,11 @@ sys.path.append(str(Path(__file__).parent.parent))
 from models.vqvae_v2 import VQVAE_V2
 from utils.dataset import get_vqvae_dataloader
 
+try:
+    import lpips  # Optional perceptual loss
+except ImportError:  # pragma: no cover - optional dependency
+    lpips = None
+
 
 # V2配置
 VQVAE_V2_CONFIG = {
@@ -47,18 +52,26 @@ VQVAE_V2_CONFIG = {
     'use_amp': True,
     'amp_dtype': 'bf16',
 
+    # 重建损失权重
+    'recon_mse_weight': 1.0,
+    'recon_l1_weight': 0.5,
+    'recon_lpips_weight': 0.1,
+    'lpips_net': 'alex',
+
     # 保存
     'save_every': 5,
     'log_every': 50,
 }
 
 
-def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config):
+def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config, lpips_model=None):
     """训练一个epoch"""
     model.train()
     total_loss = 0
     total_recon_loss = 0
     total_vq_loss = 0
+    total_l1_loss = 0
+    total_lpips_loss = 0
     total_perplexity = 0
 
     pbar = tqdm(dataloader, desc=f"Epoch {epoch}")
@@ -75,7 +88,16 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config):
         if config['use_amp']:
             with autocast(dtype=torch.bfloat16 if config['amp_dtype'] == 'bf16' else torch.float16):
                 recon, vq_loss, indices, perplexity = model(images)
-                recon_loss = nn.functional.mse_loss(recon, images)
+                mse_loss = nn.functional.mse_loss(recon, images)
+                l1_loss = nn.functional.l1_loss(recon, images)
+                lpips_loss = torch.tensor(0.0, device=device)
+                if lpips_model is not None:
+                    lpips_loss = lpips_model(recon, images).mean()
+                recon_loss = (
+                    config['recon_mse_weight'] * mse_loss
+                    + config['recon_l1_weight'] * l1_loss
+                    + config['recon_lpips_weight'] * lpips_loss
+                )
                 loss = recon_loss + vq_loss
 
             scaler.scale(loss).backward()
@@ -83,7 +105,16 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config):
             scaler.update()
         else:
             recon, vq_loss, indices, perplexity = model(images)
-            recon_loss = nn.functional.mse_loss(recon, images)
+            mse_loss = nn.functional.mse_loss(recon, images)
+            l1_loss = nn.functional.l1_loss(recon, images)
+            lpips_loss = torch.tensor(0.0, device=device)
+            if lpips_model is not None:
+                lpips_loss = lpips_model(recon, images).mean()
+            recon_loss = (
+                config['recon_mse_weight'] * mse_loss
+                + config['recon_l1_weight'] * l1_loss
+                + config['recon_lpips_weight'] * lpips_loss
+            )
             loss = recon_loss + vq_loss
 
             loss.backward()
@@ -101,6 +132,8 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config):
         total_loss += loss.item()
         total_recon_loss += recon_loss.item()
         total_vq_loss += vq_loss.item()
+        total_l1_loss += l1_loss.item()
+        total_lpips_loss += lpips_loss.item()
         total_perplexity += perplexity.item()
 
         # 更新进度条
@@ -109,6 +142,8 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config):
                 'loss': f"{loss.item():.4f}",
                 'recon': f"{recon_loss.item():.4f}",
                 'vq': f"{vq_loss.item():.4f}",
+                'l1': f"{l1_loss.item():.4f}",
+                'lpips': f"{lpips_loss.item():.4f}",
                 'ppl': f"{perplexity.item():.1f}",
             })
 
@@ -116,9 +151,11 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config):
     avg_loss = total_loss / n_batches
     avg_recon = total_recon_loss / n_batches
     avg_vq = total_vq_loss / n_batches
+    avg_l1 = total_l1_loss / n_batches
+    avg_lpips = total_lpips_loss / n_batches
     avg_perplexity = total_perplexity / n_batches
 
-    return avg_loss, avg_recon, avg_vq, avg_perplexity
+    return avg_loss, avg_recon, avg_vq, avg_l1, avg_lpips, avg_perplexity
 
 
 def save_checkpoint(model, optimizer, epoch, loss, perplexity, codebook_usage, save_path):
@@ -144,6 +181,14 @@ def main():
                         help='Number of epochs (default: from config)')
     parser.add_argument('--batch-size', type=int, default=None,
                         help='Batch size (default: from config)')
+    parser.add_argument('--recon-mse-weight', type=float, default=None,
+                        help='Weight for MSE reconstruction loss')
+    parser.add_argument('--recon-l1-weight', type=float, default=None,
+                        help='Weight for L1 reconstruction loss')
+    parser.add_argument('--recon-lpips-weight', type=float, default=None,
+                        help='Weight for LPIPS perceptual loss')
+    parser.add_argument('--lpips-net', type=str, default=None,
+                        help='LPIPS backbone (alex/vgg/squeeze)')
     parser.add_argument('--resume', type=str, default=None,
                         help='Resume from checkpoint')
     parser.add_argument('--device', type=str, default='cuda',
@@ -157,6 +202,14 @@ def main():
         config['epochs'] = args.epochs
     if args.batch_size is not None:
         config['batch_size'] = args.batch_size
+    if args.recon_mse_weight is not None:
+        config['recon_mse_weight'] = args.recon_mse_weight
+    if args.recon_l1_weight is not None:
+        config['recon_l1_weight'] = args.recon_l1_weight
+    if args.recon_lpips_weight is not None:
+        config['recon_lpips_weight'] = args.recon_lpips_weight
+    if args.lpips_net is not None:
+        config['lpips_net'] = args.lpips_net
 
     # 设备
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
@@ -202,6 +255,17 @@ def main():
     # 混合精度scaler
     scaler = GradScaler() if config['use_amp'] else None
 
+    lpips_model = None
+    if config['recon_lpips_weight'] > 0:
+        if lpips is None:
+            print("Warning: LPIPS not installed; recon_lpips_weight will be ignored.")
+            config['recon_lpips_weight'] = 0.0
+        else:
+            lpips_model = lpips.LPIPS(net=config['lpips_net']).to(device)
+            lpips_model.eval()
+            for p in lpips_model.parameters():
+                p.requires_grad_(False)
+
     # 恢复训练
     start_epoch = 0
     if args.resume:
@@ -222,14 +286,17 @@ def main():
           f"embed_dim={config['embed_dim']}, "
           f"num_embeddings={config['num_embeddings']}")
     print(f"EMA decay: {config['ema_decay']}")
+    print(f"Recon weights: mse={config['recon_mse_weight']}, "
+          f"l1={config['recon_l1_weight']}, "
+          f"lpips={config['recon_lpips_weight']}")
     print(f"Dead code reset every {config['reset_dead_codes_every']} batches")
     print("="*60 + "\n")
 
     best_loss = float('inf')
 
     for epoch in range(start_epoch, config['epochs']):
-        avg_loss, avg_recon, avg_vq, avg_perplexity = train_epoch(
-            model, dataloader, optimizer, scaler, device, epoch, config
+        avg_loss, avg_recon, avg_vq, avg_l1, avg_lpips, avg_perplexity = train_epoch(
+            model, dataloader, optimizer, scaler, device, epoch, config, lpips_model=lpips_model
         )
 
         # 更新学习率
@@ -240,7 +307,10 @@ def main():
         codebook_usage = model.get_codebook_usage()
 
         print(f"\nEpoch {epoch}:")
-        print(f"  Loss: {avg_loss:.4f} (Recon: {avg_recon:.4f}, VQ: {avg_vq:.4f})")
+        print(
+            f"  Loss: {avg_loss:.4f} (Recon: {avg_recon:.4f}, VQ: {avg_vq:.4f}, "
+            f"L1: {avg_l1:.4f}, LPIPS: {avg_lpips:.4f})"
+        )
         print(f"  Perplexity: {avg_perplexity:.1f}")
         print(f"  Codebook: {codebook_usage['used_codes']}/{codebook_usage['total_codes']} "
               f"({codebook_usage['usage_ratio']*100:.1f}% used)")

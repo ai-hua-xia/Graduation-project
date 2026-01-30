@@ -24,7 +24,7 @@ warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from models.vqvae_v2 import VQVAE_V2
+from models.vqvae_v2 import load_vqvae_v2_checkpoint
 from models.world_model import WorldModel
 from train.config import WM_CONFIG
 from evaluate.metrics import VideoMetrics
@@ -100,16 +100,16 @@ def compute_stability_metrics(metrics_over_steps):
     return stability
 
 
-def load_models(vqvae_path, world_model_path, device):
+def load_models(vqvae_path, world_model_path, device, num_embeddings=None):
     """加载模型"""
     # VQ-VAE
-    vqvae = VQVAE_V2().to(device)
-    checkpoint = torch.load(vqvae_path, map_location=device, weights_only=False)
-    vqvae.load_state_dict(checkpoint['model_state_dict'])
+    vqvae, _ = load_vqvae_v2_checkpoint(vqvae_path, device)
     vqvae.eval()
 
     # World Model
-    config = WM_CONFIG
+    config = WM_CONFIG.copy()
+    if num_embeddings is not None:
+        config['num_embeddings'] = num_embeddings
     world_model = WorldModel(
         num_embeddings=config['num_embeddings'],
         embed_dim=config['embed_dim'],
@@ -153,7 +153,7 @@ def evaluate_single_step(vqvae, world_model, tokens, actions, device, num_sample
         metrics: 图像质量指标
     """
     context_frames = world_model.context_frames
-    metrics_calc = VideoMetrics(device=device, use_lpips=True)
+    metrics_calc = VideoMetrics(device=device, use_lpips=True, use_fid=True)
 
     correct_tokens = 0
     total_tokens = 0
@@ -220,7 +220,7 @@ def evaluate_autoregressive(
         overall_metrics: 整体指标
     """
     context_frames = world_model.context_frames
-    metrics_calc = VideoMetrics(device=device, use_lpips=True)
+    metrics_calc = VideoMetrics(device=device, use_lpips=True, use_fid=True)
 
     all_pred_frames = []
     all_real_frames = []
@@ -393,21 +393,24 @@ def main():
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # 加载模型
-    print("\nLoading models...")
-    vqvae, world_model = load_models(
-        args.vqvae_checkpoint,
-        args.world_model_checkpoint,
-        device
-    )
-
     # 加载数据
     print("\nLoading data...")
     data = np.load(args.token_file)
     tokens = data['tokens']
     actions = data['actions']
+    num_embeddings = int(tokens.max()) + 1
     print(f"Tokens shape: {tokens.shape}")
     print(f"Actions shape: {actions.shape}")
+    print(f"Num embeddings: {num_embeddings}")
+
+    # 加载模型
+    print("\nLoading models...")
+    vqvae, world_model = load_models(
+        args.vqvae_checkpoint,
+        args.world_model_checkpoint,
+        device,
+        num_embeddings=num_embeddings,
+    )
 
     results = {}
 
@@ -426,6 +429,8 @@ def main():
     print(f"SSIM: {single_step_results['ssim']:.4f}")
     if 'lpips' in single_step_results:
         print(f"LPIPS: {single_step_results['lpips']:.4f}")
+    if 'rfid' in single_step_results and single_step_results['rfid'] >= 0:
+        print(f"R-FID: {single_step_results['rfid']:.2f}")
 
     # 2. 自回归生成评估
     print("\n" + "="*60)
@@ -443,6 +448,8 @@ def main():
 
     print(f"\nOverall PSNR: {ar_overall['psnr']:.2f} dB")
     print(f"Overall SSIM: {ar_overall['ssim']:.4f}")
+    if 'rfid' in ar_overall and ar_overall['rfid'] >= 0:
+        print(f"Overall R-FID: {ar_overall['rfid']:.2f}")
 
     # 显示稳定性指标
     print("\nLong-term Stability Metrics:")
@@ -494,7 +501,11 @@ def main():
     print("="*60)
     print(f"Single-step Token Accuracy: {single_step_results['token_accuracy']:.4f}")
     print(f"Single-step PSNR: {single_step_results['psnr']:.2f} dB")
+    if 'rfid' in single_step_results and single_step_results['rfid'] >= 0:
+        print(f"Single-step R-FID: {single_step_results['rfid']:.2f}")
     print(f"Autoregressive PSNR (avg): {ar_overall['psnr']:.2f} dB")
+    if 'rfid' in ar_overall and ar_overall['rfid'] >= 0:
+        print(f"Autoregressive R-FID (avg): {ar_overall['rfid']:.2f}")
     print(f"PSNR at step 0: {metrics_over_steps['psnr'][0]:.2f} dB")
     print(f"PSNR at step {args.sequence_length-1}: {metrics_over_steps['psnr'][-1]:.2f} dB")
     print(f"PSNR degradation: {metrics_over_steps['psnr'][0] - metrics_over_steps['psnr'][-1]:.2f} dB")

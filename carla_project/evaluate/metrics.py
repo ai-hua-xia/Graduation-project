@@ -5,12 +5,13 @@
 1. PSNR (Peak Signal-to-Noise Ratio) - 峰值信噪比
 2. SSIM (Structural Similarity Index) - 结构相似性
 3. LPIPS (Learned Perceptual Image Patch Similarity) - 感知相似性
-4. FID (Fréchet Inception Distance) - 分布距离（可选）
+4. R-FID (Reconstruction FID) - 重建分布距离（可选）
 5. FVD (Fréchet Video Distance) - 视频分布距离（可选）
 """
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from typing import List, Dict, Tuple, Optional
@@ -20,15 +21,18 @@ import cv2
 class VideoMetrics:
     """视频质量评估类"""
 
-    def __init__(self, device='cuda', use_lpips=True):
+    def __init__(self, device='cuda', use_lpips=True, use_fid=False):
         """
         Args:
             device: 计算设备
             use_lpips: 是否使用LPIPS（需要额外安装lpips库）
+            use_fid: 是否计算R-FID（需要torchvision+scipy）
         """
         self.device = device
         self.use_lpips = use_lpips
         self.lpips_model = None
+        self.use_fid = use_fid
+        self.fid_model = None
 
         if use_lpips:
             try:
@@ -39,6 +43,76 @@ class VideoMetrics:
             except ImportError:
                 print("Warning: lpips not installed. Run: pip install lpips")
                 self.use_lpips = False
+
+        if use_fid:
+            try:
+                from torchvision.models import inception_v3, Inception_V3_Weights
+                weights = Inception_V3_Weights.DEFAULT
+                model = inception_v3(weights=weights, aux_logits=False)
+                model.fc = nn.Identity()
+                model.to(device)
+                model.eval()
+                self.fid_model = model
+            except Exception as exc:
+                print(f"Warning: failed to load Inception for R-FID: {exc}")
+                self.use_fid = False
+
+    def _inception_features(self, images: np.ndarray, batch_size: int = 32) -> np.ndarray:
+        if self.fid_model is None:
+            return np.empty((0, 2048), dtype=np.float32)
+
+        imgs = images.astype(np.float32) / 255.0
+        feats = []
+        mean = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(1, 3, 1, 1)
+
+        with torch.no_grad():
+            for i in range(0, len(imgs), batch_size):
+                batch = torch.from_numpy(imgs[i:i + batch_size]).permute(0, 3, 1, 2).to(self.device)
+                if batch.shape[-1] != 299 or batch.shape[-2] != 299:
+                    batch = F.interpolate(batch, size=(299, 299), mode='bilinear', align_corners=False)
+                batch = (batch - mean) / std
+                out = self.fid_model(batch)
+                if out.dim() > 2:
+                    out = out.flatten(1)
+                feats.append(out.cpu().numpy())
+
+        return np.concatenate(feats, axis=0) if feats else np.empty((0, 2048), dtype=np.float32)
+
+    def compute_rfid(self, pred_frames: np.ndarray, target_frames: np.ndarray) -> float:
+        if not self.use_fid or self.fid_model is None:
+            return -1.0
+
+        if pred_frames.ndim == 3:
+            pred_frames = pred_frames[None, ...]
+        if target_frames.ndim == 3:
+            target_frames = target_frames[None, ...]
+
+        if len(pred_frames) < 2 or len(target_frames) < 2:
+            return -1.0
+
+        feat_pred = self._inception_features(pred_frames)
+        feat_target = self._inception_features(target_frames)
+
+        if feat_pred.size == 0 or feat_target.size == 0:
+            return -1.0
+
+        mu1 = np.mean(feat_pred, axis=0)
+        mu2 = np.mean(feat_target, axis=0)
+        sigma1 = np.cov(feat_pred, rowvar=False)
+        sigma2 = np.cov(feat_target, rowvar=False)
+
+        diff = mu1 - mu2
+        try:
+            from scipy.linalg import sqrtm
+            covmean = sqrtm(sigma1 @ sigma2)
+            if np.iscomplexobj(covmean):
+                covmean = covmean.real
+        except Exception:
+            covmean = np.eye(sigma1.shape[0])
+
+        fid = diff.dot(diff) + np.trace(sigma1 + sigma2 - 2 * covmean)
+        return float(np.real(fid))
 
     def compute_psnr(self, pred: np.ndarray, target: np.ndarray) -> float:
         """
@@ -181,6 +255,10 @@ class VideoMetrics:
         # 时间一致性
         metrics['temporal_consistency_pred'] = self.compute_temporal_consistency(pred_frames)
         metrics['temporal_consistency_target'] = self.compute_temporal_consistency(target_frames)
+
+        # R-FID（重建分布距离）
+        if self.use_fid:
+            metrics['rfid'] = self.compute_rfid(pred_frames, target_frames)
 
         return metrics
 

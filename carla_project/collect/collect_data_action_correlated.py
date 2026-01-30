@@ -25,10 +25,10 @@ IMAGE_HEIGHT = 256
 FPS = 20
 
 DEFAULT_EPISODES = 100
-FRAMES_PER_EPISODE = 100
+DEFAULT_FRAMES_PER_EPISODE = 80
 DEFAULT_SAMPLE_INTERVAL = 6  # ticks per saved frame
 
-DEFAULT_DATA_DIR = Path("data/raw_action_corr_v2")
+DEFAULT_DATA_DIR = Path("data/raw_action_corr")
 
 DEFAULT_MIN_CORR = 0.3
 DEFAULT_MIN_SPEED = 0.6
@@ -39,21 +39,29 @@ DEFAULT_MIN_DELTA = 0.02
 DEFAULT_LOW_QUANTILE = 0.3
 DEFAULT_HIGH_QUANTILE = 0.7
 
-DEFAULT_LOW_THROTTLE = 0.1
-DEFAULT_HIGH_THROTTLE = 0.85
-DEFAULT_MID_STEER = 0.4
-DEFAULT_HARD_STEER = 0.7
-DEFAULT_SEGMENT_LEN = 3
-DEFAULT_SEGMENT_JITTER = 1
-DEFAULT_STRAIGHT_RATIO = 0.3
-DEFAULT_MID_RATIO = 0.3
-DEFAULT_HARD_RATIO = 0.4
+DEFAULT_LOW_THROTTLE = 0.3
+DEFAULT_HIGH_THROTTLE = 0.5
+DEFAULT_MID_STEER = 0.12
+DEFAULT_HARD_STEER = 0.20
+DEFAULT_SEGMENT_LEN = 6
+DEFAULT_SEGMENT_JITTER = 2
+DEFAULT_STRAIGHT_RATIO = 0.4
+DEFAULT_MID_RATIO = 0.35
+DEFAULT_HARD_RATIO = 0.25
 DEFAULT_WARMUP_TICKS = 10
 DEFAULT_TURN_THRESHOLD = 0.3
 DEFAULT_HARD_THRESHOLD = 0.6
-DEFAULT_MIN_TURN_RATIO = 0.6
-DEFAULT_MIN_MID_RATIO = 0.2
-DEFAULT_MIN_HARD_RATIO = 0.2
+DEFAULT_MIN_TURN_RATIO = 0.3
+DEFAULT_MIN_MID_RATIO = 0.1
+DEFAULT_MIN_HARD_RATIO = 0.1
+DEFAULT_MIN_STRAIGHT_RATIO = 0.2
+DEFAULT_MAX_HARD_RATIO = 0.45
+DEFAULT_MAX_COLLISIONS = 0
+DEFAULT_MAX_LANE_INVASIONS = 0
+DEFAULT_MAX_STUCK_FRAMES = 6
+DEFAULT_STEER_NOISE = 0.02
+DEFAULT_THROTTLE_NOISE = 0.02
+DEFAULT_PREVIEW_EVERY = 0
 
 
 def setup_camera(world, vehicle):
@@ -162,6 +170,8 @@ def build_action_sequence(
     hard_steer,
     low_throttle,
     high_throttle,
+    steer_noise,
+    throttle_noise,
 ):
     actions = []
     mid_throttle = (low_throttle + high_throttle) / 2.0
@@ -187,14 +197,30 @@ def build_action_sequence(
             if len(actions) >= num_frames:
                 break
             if mode == "straight":
-                steer = random.uniform(-0.02, 0.02)
-                throttle = throttle_base + random.uniform(-0.02, 0.02)
+                steer = random.uniform(-steer_noise, steer_noise)
+                throttle = throttle_base + random.uniform(-throttle_noise, throttle_noise)
             else:
-                steer = steer_base + random.uniform(-0.03, 0.03)
-                throttle = throttle_base + random.uniform(-0.02, 0.02)
+                steer = steer_base + random.uniform(-steer_noise, steer_noise)
+                throttle = throttle_base + random.uniform(-throttle_noise, throttle_noise)
             actions.append([steer, throttle])
 
     return np.array(actions, dtype=np.float32)
+
+
+def save_preview_video(frames, output_path, fps=10):
+    if not frames:
+        return
+    h, w = frames[0].shape[:2]
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
+    if not out.isOpened():
+        print(f"Warning: failed to open video writer {output_path}")
+        return
+    for frame in frames:
+        bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        out.write(bgr)
+    out.release()
 
 
 def collect_episode(world, episode_num, spawn_points, args):
@@ -217,6 +243,8 @@ def collect_episode(world, episode_num, spawn_points, args):
     camera = setup_camera(world, vehicle)
 
     latest = {"image": None}
+    collision_events = {"count": 0}
+    lane_events = {"count": 0}
 
     def camera_callback(image):
         array = np.frombuffer(image.raw_data, dtype=np.uint8)
@@ -224,6 +252,23 @@ def collect_episode(world, episode_num, spawn_points, args):
         latest["image"] = array.copy()
 
     camera.listen(camera_callback)
+
+    # 碰撞/越线传感器
+    collision_bp = world.get_blueprint_library().find("sensor.other.collision")
+    collision_sensor = world.spawn_actor(collision_bp, carla.Transform(), attach_to=vehicle)
+
+    def collision_callback(event):
+        collision_events["count"] += 1
+
+    collision_sensor.listen(collision_callback)
+
+    lane_bp = world.get_blueprint_library().find("sensor.other.lane_invasion")
+    lane_sensor = world.spawn_actor(lane_bp, carla.Transform(), attach_to=vehicle)
+
+    def lane_callback(event):
+        lane_events["count"] += 1
+
+    lane_sensor.listen(lane_callback)
 
     for _ in range(5):
         world.tick()
@@ -240,7 +285,7 @@ def collect_episode(world, episode_num, spawn_points, args):
         time.sleep(0.01)
 
     actions = build_action_sequence(
-        FRAMES_PER_EPISODE,
+        args.frames_per_episode,
         args.segment_len,
         args.segment_jitter,
         args.straight_ratio,
@@ -250,14 +295,17 @@ def collect_episode(world, episode_num, spawn_points, args):
         args.hard_steer,
         args.low_throttle,
         args.high_throttle,
+        args.steer_noise,
+        args.throttle_noise,
     )
 
     sampled_images = []
     sampled_actions = []
     sampled_speeds = []
     bad_frames = 0
+    stuck_frames = 0
 
-    pbar = tqdm(range(FRAMES_PER_EPISODE), desc=f"Episode {episode_num}", leave=False)
+    pbar = tqdm(range(args.frames_per_episode), desc=f"Episode {episode_num}", leave=False)
     for frame_idx in pbar:
         steer, throttle = actions[frame_idx]
         control = carla.VehicleControl(
@@ -272,6 +320,22 @@ def collect_episode(world, episode_num, spawn_points, args):
             time.sleep(0.01)
 
         img = latest["image"]
+        speed = calculate_speed(vehicle)
+
+        if speed < 0.1:
+            stuck_frames += 1
+        else:
+            stuck_frames = 0
+
+        if collision_events["count"] > args.max_collisions:
+            pbar.set_postfix({"bad": bad_frames, "reason": "collision"})
+            break
+        if lane_events["count"] > args.max_lane_invasions:
+            pbar.set_postfix({"bad": bad_frames, "reason": "lane_invasion"})
+            break
+        if stuck_frames > args.max_stuck_frames:
+            pbar.set_postfix({"bad": bad_frames, "reason": "stuck"})
+            break
         if img is None:
             bad_frames += 1
             if bad_frames > args.max_bad_frames:
@@ -288,13 +352,17 @@ def collect_episode(world, episode_num, spawn_points, args):
 
         sampled_images.append(img)
         sampled_actions.append([steer, throttle])
-        sampled_speeds.append(calculate_speed(vehicle))
+        sampled_speeds.append(speed)
 
     camera.stop()
     camera.destroy()
+    collision_sensor.stop()
+    collision_sensor.destroy()
+    lane_sensor.stop()
+    lane_sensor.destroy()
     vehicle.destroy()
 
-    if len(sampled_images) != FRAMES_PER_EPISODE:
+    if len(sampled_images) != args.frames_per_episode:
         return False
 
     sampled_actions = np.array(sampled_actions, dtype=np.float32)
@@ -329,6 +397,7 @@ def collect_episode(world, episode_num, spawn_points, args):
 
     abs_steer = np.abs(sampled_actions[:, 0])
     turn_ratio = float(np.mean(abs_steer >= args.turn_threshold))
+    straight_ratio = float(np.mean(abs_steer < args.turn_threshold))
     mid_ratio = float(np.mean((abs_steer >= args.turn_threshold) & (abs_steer < args.hard_threshold)))
     hard_ratio = float(np.mean(abs_steer >= args.hard_threshold))
 
@@ -357,9 +426,11 @@ def collect_episode(world, episode_num, spawn_points, args):
         corr < args.min_corr
         or delta < args.min_delta
         or avg_speed_burst < args.min_speed
+        or straight_ratio < args.min_straight_ratio
         or turn_ratio < args.min_turn_ratio
         or mid_ratio < args.min_mid_ratio
         or hard_ratio < args.min_hard_ratio
+        or hard_ratio > args.max_hard_ratio
     ):
         return False
 
@@ -379,6 +450,7 @@ def collect_episode(world, episode_num, spawn_points, args):
         "min_speed": args.min_speed,
         "segment_len": args.segment_len,
         "segment_jitter": args.segment_jitter,
+        "frames_per_episode": args.frames_per_episode,
         "straight_ratio": args.straight_ratio,
         "mid_ratio": args.mid_ratio,
         "hard_ratio": args.hard_ratio,
@@ -394,10 +466,21 @@ def collect_episode(world, episode_num, spawn_points, args):
         "avg_speed_mps": avg_speed,
         "avg_speed_burst_mps": avg_speed_burst,
         "turn_ratio": turn_ratio,
+        "straight_ratio": straight_ratio,
         "mid_turn_ratio": mid_ratio,
         "hard_turn_ratio": hard_ratio,
+        "collisions": collision_events["count"],
+        "lane_invasions": lane_events["count"],
     }
     np.save(episode_dir / "metadata.npy", metadata)
+
+    if args.preview_every > 0 and episode_num % args.preview_every == 0:
+        preview_dir = Path(args.data_dir) / "_preview"
+        save_preview_video(
+            sampled_images,
+            preview_dir / f"episode_{episode_num:04d}.mp4",
+            fps=FPS,
+        )
 
     return True
 
@@ -406,7 +489,11 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Collect CARLA dataset with action-visual correlation")
     parser.add_argument("--host", type=str, default=CARLA_HOST)
     parser.add_argument("--port", type=int, default=CARLA_PORT)
+    parser.add_argument("--client-timeout", type=float, default=30.0)
+    parser.add_argument("--connect-retries", type=int, default=10)
+    parser.add_argument("--connect-retry-wait", type=float, default=3.0)
     parser.add_argument("--episodes", type=int, default=DEFAULT_EPISODES)
+    parser.add_argument("--frames-per-episode", type=int, default=DEFAULT_FRAMES_PER_EPISODE)
     parser.add_argument("--episode-start", type=int, default=None)
     parser.add_argument("--episode-end", type=int, default=None)
     parser.add_argument("--sample-interval", type=int, default=DEFAULT_SAMPLE_INTERVAL)
@@ -434,6 +521,15 @@ def parse_args():
     parser.add_argument("--min-turn-ratio", type=float, default=DEFAULT_MIN_TURN_RATIO)
     parser.add_argument("--min-mid-ratio", type=float, default=DEFAULT_MIN_MID_RATIO)
     parser.add_argument("--min-hard-ratio", type=float, default=DEFAULT_MIN_HARD_RATIO)
+    parser.add_argument("--min-straight-ratio", type=float, default=DEFAULT_MIN_STRAIGHT_RATIO)
+    parser.add_argument("--max-hard-ratio", type=float, default=DEFAULT_MAX_HARD_RATIO)
+    parser.add_argument("--max-collisions", type=int, default=DEFAULT_MAX_COLLISIONS)
+    parser.add_argument("--max-lane-invasions", type=int, default=DEFAULT_MAX_LANE_INVASIONS)
+    parser.add_argument("--max-stuck-frames", type=int, default=DEFAULT_MAX_STUCK_FRAMES)
+    parser.add_argument("--steer-noise", type=float, default=DEFAULT_STEER_NOISE)
+    parser.add_argument("--throttle-noise", type=float, default=DEFAULT_THROTTLE_NOISE)
+    parser.add_argument("--preview-every", type=int, default=DEFAULT_PREVIEW_EVERY,
+                        help="Save preview video every N successful episodes (0 disables).")
     parser.add_argument("--max-attempts", type=int, default=DEFAULT_MAX_ATTEMPTS)
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
@@ -460,15 +556,30 @@ def main():
         print(f"Episode range: {args.episode_start}-{args.episode_end}")
     else:
         print(f"Episodes: {args.episodes}")
-    print(f"Frames per episode: {FRAMES_PER_EPISODE}")
+    print(f"Frames per episode: {args.frames_per_episode}")
     print(f"Sample interval: {args.sample_interval} ticks")
     print(f"Host: {args.host}  Port: {args.port}")
     print(f"Output dir: {data_dir.resolve()}")
     print("=" * 70)
 
     client = carla.Client(args.host, args.port)
-    client.set_timeout(30.0)
-    world = client.get_world()
+    client.set_timeout(args.client_timeout)
+    world = None
+    for attempt in range(1, args.connect_retries + 1):
+        try:
+            world = client.get_world()
+            break
+        except RuntimeError:
+            if attempt >= args.connect_retries:
+                raise
+            print(
+                f"CARLA not ready yet ({args.host}:{args.port}), retry {attempt}/{args.connect_retries}..."
+            )
+            time.sleep(args.connect_retry_wait)
+    if world is None:
+        raise RuntimeError(
+            f"Failed to connect to CARLA at {args.host}:{args.port} after retries."
+        )
     if args.map not in world.get_map().name:
         world = client.load_world(args.map)
         time.sleep(3)

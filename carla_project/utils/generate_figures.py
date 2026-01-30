@@ -23,7 +23,7 @@ os.makedirs(output_dir, exist_ok=True)
 
 def draw_action_distribution():
     """动作分布图"""
-    token_file = '/home/llb/HunyuanWorld-Voyager/bishe/carla_project/data/tokens_v2/tokens_actions.npz'
+    token_file = '/home/llb/HunyuanWorld-Voyager/bishe/carla_project/data/tokens_raw/tokens_actions.npz'
 
     if os.path.exists(token_file):
         data = np.load(token_file)
