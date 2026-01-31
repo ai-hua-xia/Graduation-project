@@ -8,7 +8,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CARLA_SH="${ROOT_DIR}/CARLA_0.9.16/CarlaUE4.sh"
-LOG_DIR="${ROOT_DIR}/logs"
+LOG_DIR="${ROOT_DIR}/logs/data_collect"
 
 MAP_NAME="${MAP_NAME:-Town04}"
 DATA_DIR="${DATA_DIR:-data/raw_action_corr_v3}"

@@ -18,15 +18,15 @@
 |------|------|------|
 | 数据集 | ✅ 已就绪 | `data/raw`、`data/raw_action_corr_v2`、`data/raw_action_corr_v3` |
 | Tokens | ✅ 已就绪 | `data/tokens_action_corr_v2/tokens_actions.npz`、`data/tokens_raw/tokens_actions.npz`（可选：`data/tokens_action_corr_f8/tokens_actions.npz`） |
-| VQ-VAE | ✅ v3 checkpoint | `checkpoints/vqvae_action_corr_v2/best.pth`（兼容 `vqvae_v2`；可选：`checkpoints/vqvae_action_corr_f8/best.pth`） |
-| World Model | ✅ v5 系列 | `checkpoints/world_model_v5`、`world_model_v5_ss`、`world_model_v5_ss_fast` |
-| Scheduled Sampling | ✅ 有可用权重 | `checkpoints/world_model_v5_ss`、`world_model_v5_ss_fast`、`world_model_v4_ss_e029` |
+| VQ-VAE | ✅ v3 checkpoint | `checkpoints/vqvae/vqvae_action_corr_v2/best.pth`（兼容 `vqvae_v2`；可选：`checkpoints/vqvae/vqvae_action_corr_f8/best.pth`） |
+| World Model | ✅ v5 系列 | `checkpoints/wm/world_model_v5`、`checkpoints/wm_ss/world_model_v5_ss`、`checkpoints/wm_ss/world_model_v5_ss_fast` |
+| Scheduled Sampling | ✅ 有可用权重 | `checkpoints/wm_ss/world_model_v5_ss`、`checkpoints/wm_ss/world_model_v5_ss_fast`、`checkpoints/wm_ss/world_model_v4_ss_e029` |
 | 工具脚本 | ✅ 已统一 | `bin/model_tools.sh` + `bin/run_collect_10.sh`（10 端口并行采集） |
 
 **自动选择规则（model_tools.sh）**：
 - Token 文件：优先 `data/tokens_action_corr_v2/tokens_actions.npz`，否则使用 `data/tokens_raw/tokens_actions.npz`
-- VQ-VAE：优先 `checkpoints/vqvae_action_corr_v2/best.pth`，否则回退到 `checkpoints/vqvae_v2/best.pth`
-- World Model checkpoint：`world_model_v5_ss_fast` → `world_model_v5_ss` → `world_model_v5` → `world_model_v4_ss_e029` → `world_model_v4` → `world_model_v3` → `world_model_ss`
+- VQ-VAE：优先 `checkpoints/vqvae/vqvae_action_corr_v2/best.pth`，否则回退到 `checkpoints/vqvae/vqvae_v2/best.pth`
+- World Model checkpoint：`wm_ss/world_model_v5_ss_fast` → `wm_ss/world_model_v5_ss` → `wm/world_model_v5` → `wm_ss/world_model_v4_ss_e029` → `wm/world_model_v4` → `wm/world_model_v3` → `wm_ss/world_model_v2_ss`
 
 > 注：f=8（32×32 tokens）需要手动指定 `vqvae_action_corr_f8` 与 `tokens_action_corr_f8`，不会自动选择。
 
@@ -59,8 +59,8 @@
 #### 方式1: 生成预测视频
 ```bash
 python utils/generate_videos.py \
-    --vqvae-checkpoint checkpoints/vqvae_action_corr_v2/best.pth \
-    --world-model-checkpoint checkpoints/world_model_v5_ss_fast/best.pth \
+    --vqvae-checkpoint checkpoints/vqvae/vqvae_action_corr_v2/best.pth \
+    --world-model-checkpoint checkpoints/wm_ss/world_model_v5_ss_fast/best.pth \
     --token-file data/tokens_action_corr_v2/tokens_actions.npz \
     --output-dir outputs/videos \
     --num-videos 1 \
@@ -73,8 +73,8 @@ python utils/generate_videos.py \
 #### 方式2: 评估模型
 ```bash
 python evaluate/evaluate_world_model.py \
-    --vqvae-checkpoint checkpoints/vqvae_action_corr_v2/best.pth \
-    --world-model-checkpoint checkpoints/world_model_v5_ss_fast/best.pth \
+    --vqvae-checkpoint checkpoints/vqvae/vqvae_action_corr_v2/best.pth \
+    --world-model-checkpoint checkpoints/wm_ss/world_model_v5_ss_fast/best.pth \
     --token-file data/tokens_action_corr_v2/tokens_actions.npz \
     --output outputs/evaluations/eval.json \
     --num-samples 100 \
@@ -87,13 +87,13 @@ python evaluate/evaluate_world_model.py \
 ```bash
 python train/train_vqvae_v3.py \
     --data-path data/raw_action_corr_v3 \
-    --save-dir checkpoints/vqvae_action_corr_f8 \
+    --save-dir checkpoints/vqvae/vqvae_action_corr_f8 \
     --downsample-factor 8 \
     --batch-size 32
 
 python utils/export_tokens_v2.py \
     --data-path data/raw_action_corr_v3 \
-    --vqvae-checkpoint checkpoints/vqvae_action_corr_f8/best.pth \
+    --vqvae-checkpoint checkpoints/vqvae/vqvae_action_corr_f8/best.pth \
     --output data/tokens_action_corr_f8/tokens_actions.npz
 ```
 
@@ -147,14 +147,18 @@ carla_project/
 │   ├── analysis/
 │   └── figures/
 ├── checkpoints/           # 已训练模型
-│   ├── vqvae_v2/
-│   ├── vqvae_action_corr_v2/
-│   └── vqvae_action_corr_f8/   # 可选 f=8
-│   ├── world_model_v4/
-│   ├── world_model_v4_ss_e029/
-│   ├── world_model_v5/
-│   ├── world_model_v5_ss/
-│   └── world_model_v5_ss_fast/
+│   ├── vqvae/
+│   │   ├── vqvae_v2/
+│   │   ├── vqvae_action_corr_v2/
+│   │   └── vqvae_action_corr_f8/   # 可选 f=8
+│   ├── wm/
+│   │   ├── world_model/
+│   │   ├── world_model_v5/
+│   │   └── world_model_v4/
+│   └── wm_ss/
+│       ├── world_model_v5_ss/
+│       ├── world_model_v5_ss_fast/
+│       └── world_model_v4_ss_e029/
 ├── data/                  # 数据与 tokens
 │   ├── raw/
 │   ├── raw_action_corr_v2/

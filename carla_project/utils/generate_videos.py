@@ -527,9 +527,9 @@ def main():
                        choices=['predict', 'retrieve', 'hybrid'],
                        help='predict: WM autoregressive; retrieve: best-match replay; hybrid: periodic reset')
     parser.add_argument('--vqvae-checkpoint', type=str,
-                       default='checkpoints/vqvae_v2/best.pth')
+                       default='checkpoints/vqvae/vqvae_v2/best.pth')
     parser.add_argument('--world-model-checkpoint', type=str,
-                       default='checkpoints/world_model_ss/best.pth')
+                       default='checkpoints/wm_ss/world_model_v5_ss/best.pth')
     parser.add_argument('--token-file', type=str,
                        default='data/tokens_raw/tokens_actions.npz')
     parser.add_argument('--output-dir', type=str, default='results/videos')

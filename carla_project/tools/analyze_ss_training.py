@@ -10,7 +10,7 @@ from pathlib import Path
 plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.rcParams['axes.unicode_minus'] = False
 
-log_file = Path('/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_ss.log')
+log_file = Path('/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_ss/train_ss.log')
 
 epochs = []
 losses = []

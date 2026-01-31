@@ -199,8 +199,8 @@ def main():
 
     # 加载模型
     vqvae, world_model = load_models(
-        'checkpoints/vqvae_v2/best.pth',
-        'checkpoints/world_model_ss/best.pth',
+        'checkpoints/vqvae/vqvae_v2/best.pth',
+        'checkpoints/wm_ss/world_model_v5_ss/best.pth',
         'cuda',
         num_embeddings=num_embeddings,
     )

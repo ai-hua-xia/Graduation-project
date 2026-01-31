@@ -17,6 +17,15 @@ from train.config import WM_CONFIG
 
 def pick_default_world_model():
     candidates = [
+        Path("checkpoints/wm_ss/world_model_v5_ss_fast/best.pth"),
+        Path("checkpoints/wm_ss/world_model_v5_ss/best.pth"),
+        Path("checkpoints/wm/world_model_v5/best.pth"),
+        Path("checkpoints/wm_ss/world_model_v4_ss_e029/best.pth"),
+        Path("checkpoints/wm/world_model_v4/best.pth"),
+        Path("checkpoints/wm_ss/world_model_v3_ss/best.pth"),
+        Path("checkpoints/wm/world_model_v3/best.pth"),
+        Path("checkpoints/wm/world_model/best.pth"),
+        Path("checkpoints/wm_ss/world_model_v2_ss/best.pth"),
         Path("checkpoints/world_model_v4_ss/best.pth"),
         Path("checkpoints/world_model_v4/best.pth"),
         Path("checkpoints/world_model_v3_ss/best.pth"),
@@ -204,7 +213,7 @@ def diagnose_model(vqvae_path, wm_path, token_file, device='cuda'):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="World Model Diagnostic Tool")
-    parser.add_argument("--vqvae-checkpoint", type=str, default="checkpoints/vqvae_v2/best.pth")
+    parser.add_argument("--vqvae-checkpoint", type=str, default="checkpoints/vqvae/vqvae_v2/best.pth")
     parser.add_argument("--world-model-checkpoint", type=str, default=pick_default_world_model())
     parser.add_argument("--token-file", type=str, default=pick_default_token_file())
     parser.add_argument("--device", type=str, default="cuda")

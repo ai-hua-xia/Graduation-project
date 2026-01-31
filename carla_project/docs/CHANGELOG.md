@@ -17,7 +17,7 @@
 - 采集质量约束保持：collision / lane / stuck 过滤与预览视频输出
 
 ### ✅ 模型与训练进度同步
-- VQ-VAE v3 训练输出到 `checkpoints/vqvae_action_corr_v2`
+- VQ-VAE v3 训练输出到 `checkpoints/vqvae/vqvae_action_corr_v2`
 - Tokens 固定为 `data/tokens_action_corr_v2/tokens_actions.npz`
 - World Model v5 + Scheduled Sampling v5/v5_fast 产出
 - `train/config.py` 已更新到 A-XL 配置（32层/18heads）

@@ -78,14 +78,18 @@ data/
 
 ```
 checkpoints/
-├── vqvae_v2/
-├── vqvae_action_corr_v2/
-└── vqvae_action_corr_f8/   # 可选 f=8
-├── world_model_v4/
-├── world_model_v4_ss_e029/
-├── world_model_v5/
-├── world_model_v5_ss/
-└── world_model_v5_ss_fast/
+├── vqvae/
+│   ├── vqvae_v2/
+│   ├── vqvae_action_corr_v2/
+│   └── vqvae_action_corr_f8/   # 可选 f=8
+├── wm/
+│   ├── world_model/
+│   ├── world_model_v5/
+│   └── world_model_v4/
+└── wm_ss/
+    ├── world_model_v5_ss/
+    ├── world_model_v5_ss_fast/
+    └── world_model_v4_ss_e029/
 ```
 
 ### `outputs/` - 输出目录
@@ -100,7 +104,12 @@ outputs/
 
 ### `logs/` - 训练日志
 
-- 训练输出集中在 `logs/`（例如 `train_wm_v4.log`、`train_wm_v4_ss_e029.log`）
+- 日志按类别归档到子目录：
+  - `logs/train_wm/`（WM 训练）
+  - `logs/train_ss/`（SS 训练）
+  - `logs/train_vqvae/`（VQ-VAE 训练）
+  - `logs/data_collect/`（采集日志）
+- 示例：`logs/train_wm/train_world_model_v5.log`、`logs/train_ss/train_wm_v4_ss_e029.log`
 
 ## 🎯 设计原则
 

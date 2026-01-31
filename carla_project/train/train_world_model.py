@@ -279,7 +279,7 @@ def main():
     parser = argparse.ArgumentParser(description='Train World Model')
     parser.add_argument('--token-path', type=str, required=True,
                         help='Path to tokens file')
-    parser.add_argument('--save-dir', type=str, default='../checkpoints/world_model',
+    parser.add_argument('--save-dir', type=str, default='../checkpoints/wm/world_model',
                         help='Directory to save checkpoints')
     parser.add_argument('--epochs', type=int, default=None,
                         help='Number of epochs')

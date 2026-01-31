@@ -13,7 +13,13 @@ pick_token_file() {
 }
 
 pick_vqvae_checkpoint() {
-    if [ -f "checkpoints/vqvae_action_corr_v2/best.pth" ]; then
+    if [ -f "checkpoints/vqvae/vqvae_action_corr_v2/best.pth" ]; then
+        echo "checkpoints/vqvae/vqvae_action_corr_v2/best.pth"
+    elif [ -f "checkpoints/vqvae/vqvae_action_corr/best.pth" ]; then
+        echo "checkpoints/vqvae/vqvae_action_corr/best.pth"
+    elif [ -f "checkpoints/vqvae/vqvae_v2/best.pth" ]; then
+        echo "checkpoints/vqvae/vqvae_v2/best.pth"
+    elif [ -f "checkpoints/vqvae_action_corr_v2/best.pth" ]; then
         echo "checkpoints/vqvae_action_corr_v2/best.pth"
     elif [ -f "checkpoints/vqvae_action_corr/best.pth" ]; then
         echo "checkpoints/vqvae_action_corr/best.pth"
@@ -23,7 +29,25 @@ pick_vqvae_checkpoint() {
 }
 
 pick_world_model_checkpoint() {
-    if [ -f "checkpoints/world_model_v5_ss_fast/best.pth" ]; then
+    if [ -f "checkpoints/wm_ss/world_model_v5_ss_fast/best.pth" ]; then
+        echo "checkpoints/wm_ss/world_model_v5_ss_fast/best.pth"
+    elif [ -f "checkpoints/wm_ss/world_model_v5_ss/best.pth" ]; then
+        echo "checkpoints/wm_ss/world_model_v5_ss/best.pth"
+    elif [ -f "checkpoints/wm/world_model_v5/best.pth" ]; then
+        echo "checkpoints/wm/world_model_v5/best.pth"
+    elif [ -f "checkpoints/wm_ss/world_model_v4_ss_e029/best.pth" ]; then
+        echo "checkpoints/wm_ss/world_model_v4_ss_e029/best.pth"
+    elif [ -f "checkpoints/wm/world_model_v4/best.pth" ]; then
+        echo "checkpoints/wm/world_model_v4/best.pth"
+    elif [ -f "checkpoints/wm_ss/world_model_v3_ss/best.pth" ]; then
+        echo "checkpoints/wm_ss/world_model_v3_ss/best.pth"
+    elif [ -f "checkpoints/wm/world_model_v3/best.pth" ]; then
+        echo "checkpoints/wm/world_model_v3/best.pth"
+    elif [ -f "checkpoints/wm/world_model/best.pth" ]; then
+        echo "checkpoints/wm/world_model/best.pth"
+    elif [ -f "checkpoints/wm_ss/world_model_v2_ss/best.pth" ]; then
+        echo "checkpoints/wm_ss/world_model_v2_ss/best.pth"
+    elif [ -f "checkpoints/world_model_v5_ss_fast/best.pth" ]; then
         echo "checkpoints/world_model_v5_ss_fast/best.pth"
     elif [ -f "checkpoints/world_model_v5_ss/best.pth" ]; then
         echo "checkpoints/world_model_v5_ss/best.pth"
@@ -87,65 +111,105 @@ cmd_status() {
     echo ""
 
     # World Model v5
-    if [ -f "logs/train_world_model_v5.log" ]; then
-        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_world_model_v5.log | tail -1)
+    if [ -f "logs/train_wm/train_world_model_v5.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm/train_world_model_v5.log | tail -1)
         echo "📊 World Model v5: $latest_epoch"
+        grep -A 4 "^Epoch [0-9]\+:$" logs/train_wm/train_world_model_v5.log | tail -15 | grep -E "(Epoch|Loss|CE|Smooth|Contrast|Weight)" | tail -12
+        echo ""
+    elif [ -f "logs/train_world_model_v5.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_world_model_v5.log | tail -1)
+        echo "📊 World Model v5 (legacy log): $latest_epoch"
         grep -A 4 "^Epoch [0-9]\+:$" logs/train_world_model_v5.log | tail -15 | grep -E "(Epoch|Loss|CE|Smooth|Contrast|Weight)" | tail -12
         echo ""
     fi
 
     # Scheduled Sampling v5
-    if [ -f "logs/train_world_model_v5_ss.log" ]; then
-        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_world_model_v5_ss.log | tail -1)
+    if [ -f "logs/train_ss/train_world_model_v5_ss.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_ss/train_world_model_v5_ss.log | tail -1)
         echo "📊 Scheduled Sampling v5: $latest_epoch"
+        grep -A 3 "^Epoch [0-9]\+:$" logs/train_ss/train_world_model_v5_ss.log | tail -12 | grep -E "(Epoch|Loss|CE|Contrast|Sampling)" | tail -9
+        echo ""
+    elif [ -f "logs/train_world_model_v5_ss.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_world_model_v5_ss.log | tail -1)
+        echo "📊 Scheduled Sampling v5 (legacy log): $latest_epoch"
         grep -A 3 "^Epoch [0-9]\+:$" logs/train_world_model_v5_ss.log | tail -12 | grep -E "(Epoch|Loss|CE|Contrast|Sampling)" | tail -9
         echo ""
     fi
 
     # Scheduled Sampling v5 (fast)
-    if [ -f "logs/train_world_model_v5_ss_fast.log" ]; then
-        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_world_model_v5_ss_fast.log | tail -1)
+    if [ -f "logs/train_ss/train_world_model_v5_ss_fast.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_ss/train_world_model_v5_ss_fast.log | tail -1)
         echo "📊 Scheduled Sampling v5 (fast): $latest_epoch"
+        grep -A 3 "^Epoch [0-9]\+:$" logs/train_ss/train_world_model_v5_ss_fast.log | tail -12 | grep -E "(Epoch|Loss|CE|Contrast|Sampling)" | tail -9
+        echo ""
+    elif [ -f "logs/train_world_model_v5_ss_fast.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_world_model_v5_ss_fast.log | tail -1)
+        echo "📊 Scheduled Sampling v5 (fast, legacy log): $latest_epoch"
         grep -A 3 "^Epoch [0-9]\+:$" logs/train_world_model_v5_ss_fast.log | tail -12 | grep -E "(Epoch|Loss|CE|Contrast|Sampling)" | tail -9
         echo ""
     fi
 
     # World Model v4
-    if [ -f "logs/train_wm_v4.log" ]; then
-        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v4.log | tail -1)
+    if [ -f "logs/train_wm/train_wm_v4.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm/train_wm_v4.log | tail -1)
         echo "📊 World Model v4: $latest_epoch"
+        grep -A 4 "^Epoch [0-9]\+:$" logs/train_wm/train_wm_v4.log | tail -15 | grep -E "(Epoch|Loss|CE|Smooth|Contrast|Weight)" | tail -12
+        echo ""
+    elif [ -f "logs/train_wm_v4.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v4.log | tail -1)
+        echo "📊 World Model v4 (legacy log): $latest_epoch"
         grep -A 4 "^Epoch [0-9]\+:$" logs/train_wm_v4.log | tail -15 | grep -E "(Epoch|Loss|CE|Smooth|Contrast|Weight)" | tail -12
         echo ""
     fi
 
     # Scheduled Sampling v4
-    if [ -f "logs/train_wm_v4_ss.log" ]; then
-        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v4_ss.log | tail -1)
+    if [ -f "logs/train_ss/train_wm_v4_ss_e029.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_ss/train_wm_v4_ss_e029.log | tail -1)
         echo "📊 Scheduled Sampling v4: $latest_epoch"
+        grep -A 3 "^Epoch [0-9]\+:$" logs/train_ss/train_wm_v4_ss_e029.log | tail -12 | grep -E "(Epoch|Loss|CE|Contrast|Sampling)" | tail -9
+        echo ""
+    elif [ -f "logs/train_wm_v4_ss.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v4_ss.log | tail -1)
+        echo "📊 Scheduled Sampling v4 (legacy log): $latest_epoch"
         grep -A 3 "^Epoch [0-9]\+:$" logs/train_wm_v4_ss.log | tail -12 | grep -E "(Epoch|Loss|CE|Contrast|Sampling)" | tail -9
         echo ""
     fi
 
     # World Model v3
-    if [ -f "logs/train_wm_v3.log" ]; then
-        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v3.log | tail -1)
+    if [ -f "logs/train_wm/train_wm_v3.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm/train_wm_v3.log | tail -1)
         echo "📊 World Model v3: $latest_epoch"
+        grep -A 4 "^Epoch [0-9]\+:$" logs/train_wm/train_wm_v3.log | tail -15 | grep -E "(Epoch|Loss|CE|Smooth|Weight)" | tail -12
+        echo ""
+    elif [ -f "logs/train_wm_v3.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v3.log | tail -1)
+        echo "📊 World Model v3 (legacy log): $latest_epoch"
         grep -A 4 "^Epoch [0-9]\+:$" logs/train_wm_v3.log | tail -15 | grep -E "(Epoch|Loss|CE|Smooth|Weight)" | tail -12
         echo ""
     fi
 
     # Scheduled Sampling v3
-    if [ -f "logs/train_wm_v3_ss.log" ]; then
-        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v3_ss.log | tail -1)
+    if [ -f "logs/train_ss/train_wm_v3_ss.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_ss/train_wm_v3_ss.log | tail -1)
         echo "📊 Scheduled Sampling v3: $latest_epoch"
+        grep -A 3 "^Epoch [0-9]\+:$" logs/train_ss/train_wm_v3_ss.log | tail -12 | grep -E "(Epoch|Loss|CE|Sampling)" | tail -9
+        echo ""
+    elif [ -f "logs/train_wm_v3_ss.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_wm_v3_ss.log | tail -1)
+        echo "📊 Scheduled Sampling v3 (legacy log): $latest_epoch"
         grep -A 3 "^Epoch [0-9]\+:$" logs/train_wm_v3_ss.log | tail -12 | grep -E "(Epoch|Loss|CE|Sampling)" | tail -9
         echo ""
     fi
 
     # 兼容旧日志
-    if [ -f "logs/train_ss.log" ]; then
-        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_ss.log | tail -1)
+    if [ -f "logs/train_ss/train_ss.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_ss/train_ss.log | tail -1)
         echo "📊 Scheduled Sampling (legacy): $latest_epoch"
+        grep -A 3 "^Epoch [0-9]\+:$" logs/train_ss/train_ss.log | tail -12 | grep -E "(Epoch|Loss|Sampling)" | tail -9
+        echo ""
+    elif [ -f "logs/train_ss.log" ]; then
+        latest_epoch=$(grep -oP "^Epoch \d+" logs/train_ss.log | tail -1)
+        echo "📊 Scheduled Sampling (legacy, old path): $latest_epoch"
         grep -A 3 "^Epoch [0-9]\+:$" logs/train_ss.log | tail -12 | grep -E "(Epoch|Loss|Sampling)" | tail -9
         echo ""
     fi

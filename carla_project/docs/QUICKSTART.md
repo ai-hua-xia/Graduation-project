@@ -66,12 +66,12 @@ python collect/collect_data_action_correlated.py \
 ```bash
 python train/train_vqvae_v3.py \
     --data-path data/raw_action_corr_v3 \
-    --save-dir checkpoints/vqvae_action_corr_v2
+    --save-dir checkpoints/vqvae/vqvae_action_corr_v2
 
 # 可选：f=8（32×32 tokens）
 # python train/train_vqvae_v3.py \
 #     --data-path data/raw_action_corr_v3 \
-#     --save-dir checkpoints/vqvae_action_corr_f8 \
+#     --save-dir checkpoints/vqvae/vqvae_action_corr_f8 \
 #     --downsample-factor 8
 ```
 
@@ -79,13 +79,13 @@ python train/train_vqvae_v3.py \
 ```bash
 python utils/export_tokens_v2.py \
     --data-path data/raw_action_corr_v3 \
-    --vqvae-checkpoint checkpoints/vqvae_action_corr_v2/best.pth \
+    --vqvae-checkpoint checkpoints/vqvae/vqvae_action_corr_v2/best.pth \
     --output data/tokens_action_corr_v2/tokens_actions.npz
 
 # 可选：f=8 tokens
 # python utils/export_tokens_v2.py \
 #     --data-path data/raw_action_corr_v3 \
-#     --vqvae-checkpoint checkpoints/vqvae_action_corr_f8/best.pth \
+#     --vqvae-checkpoint checkpoints/vqvae/vqvae_action_corr_f8/best.pth \
 #     --output data/tokens_action_corr_f8/tokens_actions.npz
 ```
 
@@ -93,29 +93,29 @@ python utils/export_tokens_v2.py \
 ```bash
 python train/train_world_model.py \
     --token-path data/tokens_action_corr_v2/tokens_actions.npz \
-    --save-dir checkpoints/world_model_v5
+    --save-dir checkpoints/wm/world_model_v5
 ```
 
 多卡示例：
 ```bash
 torchrun --nproc_per_node=2 train/train_world_model.py \
     --token-path data/tokens_action_corr_v2/tokens_actions.npz \
-    --save-dir checkpoints/world_model_v5
+    --save-dir checkpoints/wm/world_model_v5
 ```
 
 ### Step 5: Scheduled Sampling（可选）
 ```bash
 python train/train_world_model_ss.py \
     --token-path data/tokens_action_corr_v2/tokens_actions.npz \
-    --pretrained checkpoints/world_model_v5/best.pth \
-    --save-dir checkpoints/world_model_v5_ss_fast
+    --pretrained checkpoints/wm/world_model_v5/best.pth \
+    --save-dir checkpoints/wm_ss/world_model_v5_ss_fast
 ```
 
 ### Step 6: 生成视频
 ```bash
 python utils/generate_videos.py \
-    --vqvae-checkpoint checkpoints/vqvae_action_corr_v2/best.pth \
-    --world-model-checkpoint checkpoints/world_model_v5_ss_fast/best.pth \
+    --vqvae-checkpoint checkpoints/vqvae/vqvae_action_corr_v2/best.pth \
+    --world-model-checkpoint checkpoints/wm_ss/world_model_v5_ss_fast/best.pth \
     --token-file data/tokens_action_corr_v2/tokens_actions.npz \
     --output-dir outputs/videos \
     --num-videos 1 \
@@ -127,8 +127,8 @@ python utils/generate_videos.py \
 ### Step 7: 评估模型
 ```bash
 python evaluate/evaluate_world_model.py \
-    --vqvae-checkpoint checkpoints/vqvae_action_corr_v2/best.pth \
-    --world-model-checkpoint checkpoints/world_model_v5_ss_fast/best.pth \
+    --vqvae-checkpoint checkpoints/vqvae/vqvae_action_corr_v2/best.pth \
+    --world-model-checkpoint checkpoints/wm_ss/world_model_v5_ss_fast/best.pth \
     --token-file data/tokens_action_corr_v2/tokens_actions.npz \
     --output outputs/evaluations/eval.json \
     --num-samples 100 \
@@ -165,14 +165,14 @@ EOF_ACTIONS
 ls logs
 
 # 示例：查看 v5 训练日志
-tail -f logs/train_world_model_v5.log
+tail -f logs/train_wm/train_world_model_v5.log
 ```
 
 查看 checkpoint 信息：
 ```bash
 python - << 'PY'
 import torch
-ckpt = torch.load('checkpoints/world_model_v5/best.pth', map_location='cpu', weights_only=False)
+ckpt = torch.load('checkpoints/wm/world_model_v5/best.pth', map_location='cpu', weights_only=False)
 print(f"Epoch: {ckpt.get('epoch')}, Loss: {ckpt.get('loss')}")
 PY
 ```

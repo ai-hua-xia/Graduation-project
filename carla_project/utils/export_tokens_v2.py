@@ -42,7 +42,7 @@ def main():
     parser.add_argument('--data-path', type=str, default='../data/raw',
                         help='Path to CARLA raw data')
     parser.add_argument('--vqvae-checkpoint', type=str,
-                        default='../checkpoints/vqvae_v2/best.pth',
+                        default='../checkpoints/vqvae/vqvae_v2/best.pth',
                         help='Path to VQ-VAE V2 checkpoint')
     parser.add_argument('--output', type=str, default='../data/tokens_raw/tokens_actions.npz',
                         help='Output file path')

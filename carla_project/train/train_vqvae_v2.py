@@ -175,7 +175,7 @@ def main():
     parser = argparse.ArgumentParser(description='Train VQ-VAE V2')
     parser.add_argument('--data-path', type=str, default='../data/raw',
                         help='Path to CARLA raw data')
-    parser.add_argument('--save-dir', type=str, default='../checkpoints/vqvae_v2',
+    parser.add_argument('--save-dir', type=str, default='../checkpoints/vqvae/vqvae_v2',
                         help='Directory to save checkpoints')
     parser.add_argument('--epochs', type=int, default=None,
                         help='Number of epochs (default: from config)')

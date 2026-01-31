@@ -85,7 +85,7 @@ def draw_training_loss():
     """训练损失曲线 - 使用真实训练数据"""
 
     # 加载VQ-VAE真实数据
-    vqvae_file = '/home/llb/HunyuanWorld-Voyager/bishe/carla_project/checkpoints/vqvae_v2/vqvae_loss_history.npz'
+    vqvae_file = '/home/llb/HunyuanWorld-Voyager/bishe/carla_project/checkpoints/vqvae/vqvae_v2/vqvae_loss_history.npz'
     if os.path.exists(vqvae_file):
         vqvae_data = np.load(vqvae_file)
         epochs_vqvae = vqvae_data['epochs']
