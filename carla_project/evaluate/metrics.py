@@ -21,18 +21,23 @@ import cv2
 class VideoMetrics:
     """视频质量评估类"""
 
-    def __init__(self, device='cuda', use_lpips=True, use_fid=False):
+    def __init__(self, device='cuda', use_lpips=True, use_fid=False, use_fvd=False):
         """
         Args:
             device: 计算设备
             use_lpips: 是否使用LPIPS（需要额外安装lpips库）
-            use_fid: 是否计算R-FID（需要torchvision+scipy）
+            use_fid: 是否计算FID/R-FID（需要torchvision+scipy）
+            use_fvd: 是否计算FVD（需要torchvision+scipy）
         """
         self.device = device
         self.use_lpips = use_lpips
         self.lpips_model = None
         self.use_fid = use_fid
         self.fid_model = None
+        self.use_fvd = use_fvd
+        self.fvd_model = None
+        self.fvd_mean = None
+        self.fvd_std = None
 
         if use_lpips:
             try:
@@ -48,7 +53,8 @@ class VideoMetrics:
             try:
                 from torchvision.models import inception_v3, Inception_V3_Weights
                 weights = Inception_V3_Weights.DEFAULT
-                model = inception_v3(weights=weights, aux_logits=False)
+                # 新版torchvision要求与weights绑定的aux_logits设置保持一致
+                model = inception_v3(weights=weights)
                 model.fc = nn.Identity()
                 model.to(device)
                 model.eval()
@@ -56,6 +62,26 @@ class VideoMetrics:
             except Exception as exc:
                 print(f"Warning: failed to load Inception for R-FID: {exc}")
                 self.use_fid = False
+
+        if use_fvd:
+            try:
+                from torchvision.models.video import r3d_18, R3D_18_Weights
+                weights = R3D_18_Weights.DEFAULT
+                model = r3d_18(weights=weights)
+                model.fc = nn.Identity()
+                model.to(device)
+                model.eval()
+                self.fvd_model = model
+                # Kinetics-400 3D backbone常用归一化参数
+                self.fvd_mean = torch.tensor(
+                    [0.43216, 0.394666, 0.37645], device=self.device
+                ).view(1, 3, 1, 1, 1)
+                self.fvd_std = torch.tensor(
+                    [0.22803, 0.22145, 0.216989], device=self.device
+                ).view(1, 3, 1, 1, 1)
+            except Exception as exc:
+                print(f"Warning: failed to load video backbone for FVD: {exc}")
+                self.use_fvd = False
 
     def _inception_features(self, images: np.ndarray, batch_size: int = 32) -> np.ndarray:
         if self.fid_model is None:
@@ -73,11 +99,100 @@ class VideoMetrics:
                     batch = F.interpolate(batch, size=(299, 299), mode='bilinear', align_corners=False)
                 batch = (batch - mean) / std
                 out = self.fid_model(batch)
+                if isinstance(out, tuple):
+                    out = out[0]
+                if hasattr(out, "logits"):
+                    out = out.logits
                 if out.dim() > 2:
                     out = out.flatten(1)
                 feats.append(out.cpu().numpy())
 
         return np.concatenate(feats, axis=0) if feats else np.empty((0, 2048), dtype=np.float32)
+
+    def _video_features(
+        self,
+        videos: np.ndarray,
+        batch_size: int = 8,
+        clip_len: int = 16,
+    ) -> np.ndarray:
+        if self.fvd_model is None:
+            return np.empty((0, 512), dtype=np.float32)
+
+        if videos.ndim != 5:
+            return np.empty((0, 512), dtype=np.float32)
+
+        vids = videos.astype(np.float32) / 255.0  # (N, T, H, W, C)
+        n_videos, timesteps = vids.shape[:2]
+        if n_videos == 0 or timesteps < 2:
+            return np.empty((0, 512), dtype=np.float32)
+
+        # 统一时间长度，避免不同clip长度导致特征分布不可比
+        if timesteps != clip_len:
+            indices = np.linspace(0, timesteps - 1, clip_len).astype(np.int64)
+            vids = vids[:, indices]
+
+        tensor = torch.from_numpy(vids).permute(0, 4, 1, 2, 3).to(self.device)  # (N, C, T, H, W)
+        n, c, t, h, w = tensor.shape
+        if h != 112 or w != 112:
+            flat = tensor.permute(0, 2, 1, 3, 4).reshape(n * t, c, h, w)
+            flat = F.interpolate(flat, size=(112, 112), mode='bilinear', align_corners=False)
+            tensor = flat.reshape(n, t, c, 112, 112).permute(0, 2, 1, 3, 4)
+
+        tensor = (tensor - self.fvd_mean) / self.fvd_std
+
+        feats = []
+        with torch.no_grad():
+            for i in range(0, len(tensor), batch_size):
+                batch = tensor[i:i + batch_size]
+                out = self.fvd_model(batch)
+                if out.dim() > 2:
+                    out = out.flatten(1)
+                feats.append(out.cpu().numpy())
+
+        return np.concatenate(feats, axis=0) if feats else np.empty((0, 512), dtype=np.float32)
+
+    @staticmethod
+    def _frechet_distance(feat_1: np.ndarray, feat_2: np.ndarray) -> float:
+        if feat_1.size == 0 or feat_2.size == 0:
+            return -1.0
+        if feat_1.shape[0] < 2 or feat_2.shape[0] < 2:
+            return -1.0
+
+        feat_1 = feat_1.astype(np.float64, copy=False)
+        feat_2 = feat_2.astype(np.float64, copy=False)
+        mu1 = np.mean(feat_1, axis=0)
+        mu2 = np.mean(feat_2, axis=0)
+        dim = feat_1.shape[1]
+        eps = 1e-6
+
+        # 小样本下全协方差矩阵非常不稳定，退化为对角协方差以避免数值爆炸
+        if min(feat_1.shape[0], feat_2.shape[0]) <= dim:
+            var1 = np.var(feat_1, axis=0) + eps
+            var2 = np.var(feat_2, axis=0) + eps
+            sigma1 = np.diag(var1)
+            sigma2 = np.diag(var2)
+        else:
+            sigma1 = np.cov(feat_1, rowvar=False)
+            sigma2 = np.cov(feat_2, rowvar=False)
+            sigma1 = sigma1 + np.eye(dim, dtype=np.float64) * eps
+            sigma2 = sigma2 + np.eye(dim, dtype=np.float64) * eps
+
+        diff = mu1 - mu2
+        try:
+            from scipy.linalg import sqrtm
+            covmean = sqrtm(sigma1 @ sigma2)
+            if np.iscomplexobj(covmean):
+                covmean = covmean.real
+            if not np.all(np.isfinite(covmean)):
+                raise ValueError("non-finite sqrtm output")
+        except Exception:
+            # 回退到对角近似
+            covmean = np.diag(np.sqrt(np.clip(np.diag(sigma1) * np.diag(sigma2), 0.0, None)))
+
+        score = diff.dot(diff) + np.trace(sigma1 + sigma2 - 2 * covmean)
+        if not np.isfinite(score):
+            return -1.0
+        return float(max(np.real(score), 0.0))
 
     def compute_rfid(self, pred_frames: np.ndarray, target_frames: np.ndarray) -> float:
         if not self.use_fid or self.fid_model is None:
@@ -97,22 +212,40 @@ class VideoMetrics:
         if feat_pred.size == 0 or feat_target.size == 0:
             return -1.0
 
-        mu1 = np.mean(feat_pred, axis=0)
-        mu2 = np.mean(feat_target, axis=0)
-        sigma1 = np.cov(feat_pred, rowvar=False)
-        sigma2 = np.cov(feat_target, rowvar=False)
+        return self._frechet_distance(feat_pred, feat_target)
 
-        diff = mu1 - mu2
-        try:
-            from scipy.linalg import sqrtm
-            covmean = sqrtm(sigma1 @ sigma2)
-            if np.iscomplexobj(covmean):
-                covmean = covmean.real
-        except Exception:
-            covmean = np.eye(sigma1.shape[0])
+    def compute_fid(self, pred_frames: np.ndarray, target_frames: np.ndarray) -> float:
+        """与R-FID一致的帧分布FID，保留独立字段便于与FVD并列展示。"""
+        return self.compute_rfid(pred_frames, target_frames)
 
-        fid = diff.dot(diff) + np.trace(sigma1 + sigma2 - 2 * covmean)
-        return float(np.real(fid))
+    def compute_fvd(
+        self,
+        pred_videos: np.ndarray,
+        target_videos: np.ndarray,
+        clip_len: int = 16,
+        max_videos: Optional[int] = None,
+    ) -> float:
+        if not self.use_fvd or self.fvd_model is None:
+            return -1.0
+
+        if pred_videos.ndim != 5 or target_videos.ndim != 5:
+            return -1.0
+
+        n_pred = len(pred_videos)
+        n_target = len(target_videos)
+        n = min(n_pred, n_target)
+        if n < 2:
+            return -1.0
+
+        if max_videos is not None:
+            n = min(n, max_videos)
+
+        pred = pred_videos[:n]
+        target = target_videos[:n]
+
+        feat_pred = self._video_features(pred, clip_len=clip_len)
+        feat_target = self._video_features(target, clip_len=clip_len)
+        return self._frechet_distance(feat_pred, feat_target)
 
     def compute_psnr(self, pred: np.ndarray, target: np.ndarray) -> float:
         """
@@ -256,9 +389,11 @@ class VideoMetrics:
         metrics['temporal_consistency_pred'] = self.compute_temporal_consistency(pred_frames)
         metrics['temporal_consistency_target'] = self.compute_temporal_consistency(target_frames)
 
-        # R-FID（重建分布距离）
+        # FID / R-FID（重建分布距离）
         if self.use_fid:
-            metrics['rfid'] = self.compute_rfid(pred_frames, target_frames)
+            fid = self.compute_fid(pred_frames, target_frames)
+            metrics['fid'] = fid
+            metrics['rfid'] = fid  # 兼容旧字段
 
         return metrics
 

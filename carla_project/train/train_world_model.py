@@ -32,6 +32,57 @@ def get_smooth_weight(epoch, config):
     return config['smooth_weight_end']
 
 
+def get_action_inject_scale(epoch, config):
+    start = config.get('action_inject_scale_start', 1.0)
+    end = config.get('action_inject_scale_end', 1.0)
+    start_epoch = config.get('action_inject_start_epoch', 0)
+    warmup_epochs = config.get('action_inject_warmup_epochs', 0)
+    if epoch < start_epoch:
+        return start
+    if warmup_epochs <= 0:
+        return end
+    progress = min(max(epoch - start_epoch, 0) / float(warmup_epochs), 1.0)
+    return start + (end - start) * progress
+
+
+def get_action_contrast_weight(epoch, config):
+    if 'action_contrast_weight_start' not in config or 'action_contrast_weight_end' not in config:
+        return config.get('action_contrast_weight', 0.0)
+    start = config.get('action_contrast_weight_start', 0.0)
+    end = config.get('action_contrast_weight_end', config.get('action_contrast_weight', 0.0))
+    start_epoch = config.get('action_contrast_start_epoch', 0)
+    warmup_epochs = config.get('action_contrast_warmup_epochs', 0)
+    if epoch < start_epoch:
+        return start
+    if warmup_epochs <= 0:
+        return end
+    progress = min(max(epoch - start_epoch, 0) / float(warmup_epochs), 1.0)
+    return start + (end - start) * progress
+
+
+def get_action_aux_weight(epoch, config):
+    start = config.get('action_aux_weight_start', 0.0)
+    end = config.get('action_aux_weight_end', 0.0)
+    warmup_epochs = config.get('action_aux_warmup_epochs', 0)
+    if warmup_epochs <= 0:
+        return end
+    progress = min(max(epoch, 0) / float(warmup_epochs), 1.0)
+    return start + (end - start) * progress
+
+
+def get_rollout_weight(epoch, config):
+    start = config.get('rollout_weight_start', 0.0)
+    end = config.get('rollout_weight_end', 0.0)
+    start_epoch = config.get('rollout_start_epoch', 0)
+    warmup_epochs = config.get('rollout_warmup_epochs', 0)
+    if epoch < start_epoch:
+        return start
+    if warmup_epochs <= 0:
+        return end
+    progress = min(max(epoch - start_epoch, 0) / float(warmup_epochs), 1.0)
+    return start + (end - start) * progress
+
+
 def should_apply_action_contrast(prob, device):
     if prob >= 1.0:
         return True
@@ -80,35 +131,132 @@ def compute_action_contrast_loss(logits, logits_pert, margin, mode):
     return nn.functional.relu(margin - divergence)
 
 
-def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config, is_main):
+def compute_rollout_loss(
+    model,
+    first_logits,
+    context_tokens,
+    context_actions,
+    future_tokens,
+    future_actions,
+    action_scale,
+):
+    """使用模型自回归预测的token计算短rollout监督损失。"""
+    if future_tokens is None or future_actions is None:
+        return torch.tensor(0.0, device=context_tokens.device)
+    if future_tokens.ndim != 4 or future_actions.ndim != 3:
+        return torch.tensor(0.0, device=context_tokens.device)
+
+    rollout_steps = min(future_tokens.size(1), future_actions.size(1))
+    if rollout_steps <= 0:
+        return torch.tensor(0.0, device=context_tokens.device)
+
+    B = context_tokens.size(0)
+    h, w = context_tokens.size(-2), context_tokens.size(-1)
+
+    # t+1使用第一步logits的argmax（detach）作为free-run输入
+    pred_token = first_logits.argmax(dim=-1).detach().view(B, h, w)
+    token_buffer = torch.cat([context_tokens[:, 1:], pred_token.unsqueeze(1)], dim=1)
+    action_buffer = torch.cat([context_actions[:, 1:], future_actions[:, :1]], dim=1)
+
+    rollout_loss = torch.tensor(0.0, device=context_tokens.device)
+    for step in range(rollout_steps):
+        logits_roll = model(token_buffer, action_buffer, action_scale=action_scale)
+        _, tokens_per_frame, vocab_size = logits_roll.shape
+        target_roll = future_tokens[:, step].view(B, -1)
+
+        ce_roll = nn.functional.cross_entropy(
+            logits_roll.view(B * tokens_per_frame, vocab_size),
+            target_roll.view(B * tokens_per_frame),
+        )
+        rollout_loss = rollout_loss + ce_roll
+
+        if step + 1 < rollout_steps:
+            pred_roll = logits_roll.argmax(dim=-1).detach().view(B, h, w)
+            token_buffer = torch.cat([token_buffer[:, 1:], pred_roll.unsqueeze(1)], dim=1)
+            action_buffer = torch.cat([action_buffer[:, 1:], future_actions[:, step + 1:step + 2]], dim=1)
+
+    return rollout_loss / float(rollout_steps)
+
+
+def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config, is_main, global_step=0):
     """训练一个epoch"""
     model.train()
     total_loss = 0
     total_ce_loss = 0
     total_smooth_loss = 0
     total_contrast_loss = 0
+    total_action_aux_loss = 0
+    total_rollout_loss = 0
 
     # 当前epoch的平滑权重
     smooth_weight = get_smooth_weight(epoch, config)
+    action_scale = get_action_inject_scale(epoch, config)
+    contrast_weight = get_action_contrast_weight(epoch, config)
+    action_aux_weight = get_action_aux_weight(epoch, config)
+    rollout_weight = get_rollout_weight(epoch, config)
+    max_grad_norm = config.get('max_grad_norm', 0.0)
 
-    pbar = tqdm(dataloader, desc=f"Epoch {epoch} (smooth={smooth_weight:.4f})", disable=not is_main)
+    max_steps = config.get('max_steps_per_epoch')
+    total_steps = min(len(dataloader), max_steps) if max_steps is not None else len(dataloader)
+    iterator = dataloader
+    if max_steps is not None:
+        import itertools
+        iterator = itertools.islice(dataloader, max_steps)
 
+    pbar = tqdm(
+        iterator,
+        desc=f"Epoch {epoch} (smooth={smooth_weight:.4f})",
+        total=total_steps,
+        disable=not is_main,
+        mininterval=config.get('tqdm_mininterval', 30.0),
+        miniters=config.get('tqdm_miniters', config.get('log_every', 100)),
+    )
+
+    warmup_steps = config.get('lr_warmup_steps', 0)
+    base_lr = config['lr']
     for batch_idx, batch in enumerate(pbar):
+        if max_steps is not None and batch_idx >= max_steps:
+            break
+
+        if warmup_steps and global_step < warmup_steps:
+            lr_scale = float(global_step + 1) / float(warmup_steps)
+            for pg in optimizer.param_groups:
+                pg['lr'] = base_lr * lr_scale
         context_tokens = batch['context_tokens'].to(device)  # (B, T, H, W)
         context_actions = batch['context_actions'].to(device)  # (B, T, action_dim)
         target_token = batch['target_token'].to(device)  # (B, H, W)
+        target_action = batch.get('target_action')
+        if target_action is not None:
+            target_action = target_action.to(device)
+        future_tokens = batch.get('future_tokens')
+        if future_tokens is not None:
+            future_tokens = future_tokens.to(device)
+        future_actions = batch.get('future_actions')
+        if future_actions is not None:
+            future_actions = future_actions.to(device)
 
         optimizer.zero_grad()
 
         use_contrast = (
-            config.get('action_contrast_weight', 0.0) > 0
+            contrast_weight > 0
             and should_apply_action_contrast(config.get('action_contrast_prob', 1.0), device)
         )
 
         # 混合精度训练
         if config['use_amp']:
             with autocast(dtype=torch.bfloat16 if config['amp_dtype'] == 'bf16' else torch.float16):
-                logits = model(context_tokens, context_actions)  # (B, tokens_per_frame, vocab)
+                if config.get('use_action_aux', False):
+                    logits, action_pred = model(
+                        context_tokens,
+                        context_actions,
+                        action_scale=action_scale,
+                        return_action_pred=True,
+                    )
+                else:
+                    logits = model(
+                        context_tokens, context_actions, action_scale=action_scale
+                    )  # (B, tokens_per_frame, vocab)
+                    action_pred = None
 
                 # 交叉熵损失
                 B, T, V = logits.shape
@@ -124,10 +272,6 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config, is_
                     action_magnitudes = torch.norm(
                         context_actions[:, -1, :], dim=-1
                     )  # (B,)
-
-                    # 扩展为序列形式用于计算平滑损失
-                    logits_seq = logits.unsqueeze(1)  # (B, 1, T, V)
-                    action_mag_seq = action_magnitudes[:-1].unsqueeze(-1)  # (B-1, 1)
 
                     # 简化版：只计算batch内相邻样本的平滑度
                     smooth_loss = torch.tensor(0.0, device=device)
@@ -146,7 +290,9 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config, is_
                 contrast_loss = torch.tensor(0.0, device=device)
                 if use_contrast:
                     perturbed_actions = build_contrast_actions(context_actions, config)
-                    logits_pert = model(context_tokens, perturbed_actions)
+                    logits_pert = model(
+                        context_tokens, perturbed_actions, action_scale=action_scale
+                    )
                     contrast_loss = compute_action_contrast_loss(
                         logits,
                         logits_pert,
@@ -154,18 +300,48 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config, is_
                         config.get('action_contrast_mode', 'hinge'),
                     )
 
+                action_aux_loss = torch.tensor(0.0, device=device)
+                if action_pred is not None and target_action is not None:
+                    action_aux_loss = nn.functional.smooth_l1_loss(action_pred, target_action)
+
+                rollout_loss = torch.tensor(0.0, device=device)
+                if rollout_weight > 0 and future_tokens is not None and future_actions is not None:
+                    rollout_loss = compute_rollout_loss(
+                        model,
+                        logits,
+                        context_tokens,
+                        context_actions,
+                        future_tokens,
+                        future_actions,
+                        action_scale,
+                    )
+
                 # 总损失
                 loss = (
                     config['ce_weight'] * ce_loss
                     + smooth_weight * smooth_loss
-                    + config.get('action_contrast_weight', 0.0) * contrast_loss
+                    + contrast_weight * contrast_loss
+                    + action_aux_weight * action_aux_loss
+                    + rollout_weight * rollout_loss
                 )
 
             scaler.scale(loss).backward()
+            if max_grad_norm and max_grad_norm > 0:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
             scaler.step(optimizer)
             scaler.update()
         else:
-            logits = model(context_tokens, context_actions)
+            if config.get('use_action_aux', False):
+                logits, action_pred = model(
+                    context_tokens,
+                    context_actions,
+                    action_scale=action_scale,
+                    return_action_pred=True,
+                )
+            else:
+                logits = model(context_tokens, context_actions, action_scale=action_scale)
+                action_pred = None
 
             B, T, V = logits.shape
             target_flat = target_token.view(B, -1)
@@ -188,7 +364,9 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config, is_
             contrast_loss = torch.tensor(0.0, device=device)
             if use_contrast:
                 perturbed_actions = build_contrast_actions(context_actions, config)
-                logits_pert = model(context_tokens, perturbed_actions)
+                logits_pert = model(
+                    context_tokens, perturbed_actions, action_scale=action_scale
+                )
                 contrast_loss = compute_action_contrast_loss(
                     logits,
                     logits_pert,
@@ -196,13 +374,33 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config, is_
                     config.get('action_contrast_mode', 'hinge'),
                 )
 
+            action_aux_loss = torch.tensor(0.0, device=device)
+            if action_pred is not None and target_action is not None:
+                action_aux_loss = nn.functional.smooth_l1_loss(action_pred, target_action)
+
+            rollout_loss = torch.tensor(0.0, device=device)
+            if rollout_weight > 0 and future_tokens is not None and future_actions is not None:
+                rollout_loss = compute_rollout_loss(
+                    model,
+                    logits,
+                    context_tokens,
+                    context_actions,
+                    future_tokens,
+                    future_actions,
+                    action_scale,
+                )
+
             loss = (
                 config['ce_weight'] * ce_loss
                 + smooth_weight * smooth_loss
-                + config.get('action_contrast_weight', 0.0) * contrast_loss
+                + contrast_weight * contrast_loss
+                + action_aux_weight * action_aux_loss
+                + rollout_weight * rollout_loss
             )
 
             loss.backward()
+            if max_grad_norm and max_grad_norm > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
             optimizer.step()
 
         # 统计
@@ -210,6 +408,8 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config, is_
         total_ce_loss += ce_loss.item()
         total_smooth_loss += smooth_loss.item()
         total_contrast_loss += contrast_loss.item()
+        total_action_aux_loss += action_aux_loss.item()
+        total_rollout_loss += rollout_loss.item()
 
         # 更新进度条
         if is_main and batch_idx % config['log_every'] == 0:
@@ -218,14 +418,25 @@ def train_epoch(model, dataloader, optimizer, scaler, device, epoch, config, is_
                 'ce': f"{ce_loss.item():.4f}",
                 'smooth': f"{smooth_loss.item():.4f}",
                 'contrast': f"{contrast_loss.item():.4f}",
+                'a_aux': f"{action_aux_loss.item():.4f}",
+                'roll': f"{rollout_loss.item():.4f}",
+                'a_scale': f"{action_scale:.3f}",
+                'c_w': f"{contrast_weight:.3f}",
+                'aux_w': f"{action_aux_weight:.3f}",
+                'r_w': f"{rollout_weight:.3f}",
             })
 
-    avg_loss = total_loss / len(dataloader)
-    avg_ce = total_ce_loss / len(dataloader)
-    avg_smooth = total_smooth_loss / len(dataloader)
-    avg_contrast = total_contrast_loss / len(dataloader)
+        global_step += 1
 
-    return avg_loss, avg_ce, avg_smooth, avg_contrast
+    num_steps = min(len(dataloader), max_steps) if max_steps is not None else len(dataloader)
+    avg_loss = total_loss / num_steps
+    avg_ce = total_ce_loss / num_steps
+    avg_smooth = total_smooth_loss / num_steps
+    avg_contrast = total_contrast_loss / num_steps
+    avg_action_aux = total_action_aux_loss / num_steps
+    avg_rollout = total_rollout_loss / num_steps
+
+    return avg_loss, avg_ce, avg_smooth, avg_contrast, avg_action_aux, avg_rollout, global_step
 
 
 def unwrap_model(model):
@@ -313,6 +524,15 @@ def main():
     if is_main_process():
         print(f"Using device: {device}")
 
+    # TF32加速（对视觉任务通常无明显质量损失）
+    if device.type == "cuda":
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        try:
+            torch.set_float32_matmul_precision("high")
+        except Exception:
+            pass
+
     # 创建保存目录
     save_dir = Path(args.save_dir)
     if is_main_process():
@@ -327,6 +547,12 @@ def main():
             batch_size=config['batch_size'],
             context_frames=config['context_frames'],
             num_workers=config['num_workers'],
+            rollout_steps=config.get('rollout_steps', 0),
+            pin_memory=config.get('pin_memory', True),
+            prefetch_factor=config.get('prefetch_factor', 4),
+            persistent_workers=config.get('persistent_workers', True),
+            stratified_ab=False,
+            ab_split=config.get('ab_split', 750),
             distributed=True,
             rank=rank,
             world_size=world_size,
@@ -338,6 +564,12 @@ def main():
             batch_size=config['batch_size'],
             context_frames=config['context_frames'],
             num_workers=config['num_workers'],
+            rollout_steps=config.get('rollout_steps', 0),
+            pin_memory=config.get('pin_memory', True),
+            prefetch_factor=config.get('prefetch_factor', 4),
+            persistent_workers=config.get('persistent_workers', True),
+            stratified_ab=config.get('stratified_ab', False),
+            ab_split=config.get('ab_split', 750),
         )
         sampler = None
 
@@ -361,6 +593,8 @@ def main():
         use_memory=config.get('use_memory', False),
         memory_dim=config.get('memory_dim', 256),
         dropout=config['dropout'],
+        conditioning_type=config.get('conditioning_type', 'adaln_zero'),
+        use_action_aux=config.get('use_action_aux', False),
     ).to(device)
 
     if distributed:
@@ -397,6 +631,9 @@ def main():
         checkpoint = torch.load(args.resume, map_location=device)
         unwrap_model(model).load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        # Ensure resumed runs honor the current config learning rate.
+        for pg in optimizer.param_groups:
+            pg['lr'] = config['lr']
         start_epoch = checkpoint['epoch'] + 1
 
     # 训练
@@ -406,17 +643,23 @@ def main():
 
     best_loss = float('inf')
 
+    steps_per_epoch = min(len(dataloader), config.get('max_steps_per_epoch')) if config.get('max_steps_per_epoch') is not None else len(dataloader)
+    global_step = start_epoch * steps_per_epoch
+
     for epoch in range(start_epoch, config['epochs']):
         if sampler is not None:
             sampler.set_epoch(epoch)
-        avg_loss, avg_ce, avg_smooth, avg_contrast = train_epoch(
-            model, dataloader, optimizer, scaler, device, epoch, config, is_main_process()
+        avg_loss, avg_ce, avg_smooth, avg_contrast, avg_action_aux, avg_rollout, global_step = train_epoch(
+            model, dataloader, optimizer, scaler, device, epoch, config, is_main_process(),
+            global_step=global_step,
         )
 
         avg_loss = reduce_mean(avg_loss, device)
         avg_ce = reduce_mean(avg_ce, device)
         avg_smooth = reduce_mean(avg_smooth, device)
         avg_contrast = reduce_mean(avg_contrast, device)
+        avg_action_aux = reduce_mean(avg_action_aux, device)
+        avg_rollout = reduce_mean(avg_rollout, device)
 
         if is_main_process():
             print(f"\nEpoch {epoch}:")
@@ -424,7 +667,13 @@ def main():
             print(f"  CE: {avg_ce:.4f}")
             print(f"  Smooth: {avg_smooth:.4f}")
             print(f"  Contrast: {avg_contrast:.4f}")
+            print(f"  ActionAux: {avg_action_aux:.4f}")
+            print(f"  Rollout: {avg_rollout:.4f}")
             print(f"  Smooth Weight: {get_smooth_weight(epoch, config):.4f}")
+            print(f"  Action Scale: {get_action_inject_scale(epoch, config):.4f}")
+            print(f"  Contrast Weight: {get_action_contrast_weight(epoch, config):.4f}")
+            print(f"  ActionAux Weight: {get_action_aux_weight(epoch, config):.4f}")
+            print(f"  Rollout Weight: {get_rollout_weight(epoch, config):.4f}")
 
             # 保存checkpoint
             if (epoch + 1) % config['save_every'] == 0:

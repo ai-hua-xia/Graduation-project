@@ -1,159 +1,138 @@
 # 项目结构说明
 
-## 📂 目录组织
+## 目录组织（当前）
 
-### `bin/` - 可执行脚本（5个）
+### `bin/` - 执行脚本
 
 | 脚本 | 功能 | 备注 |
 |------|------|------|
-| **model_tools.sh** | 🌟 统一工具入口 | 推荐主入口，提供 status/eval/video/dream/diagnose/analyze/figures |
-| run_collect_10.sh | 10 端口并行采集（Phase A/B） | 推荐用于批量采集 |
-| start_carla_server.sh | 启动 CARLA 服务器 | 默认使用 `~/CARLA_0.9.16`，参考 `INSTALL_SERVER.md` |
-| setup_env.sh | 环境检查与依赖提示 | 依赖本机 conda 环境 `voyager` |
-| activate.sh | 快速进入工作环境 | 含硬编码路径，可按需修改 |
+| `model_tools.sh` | 统一工具入口 | 兼容旧模型路径自动选择 |
+| `run_collect_10.sh` | 10 端口并行采集 | Phase A/B 采集 |
+| `start_carla_server.sh` | 启动 CARLA 服务 | 服务器入口 |
+| `setup_env.sh` | 环境检查 | conda/cuda 检查 |
+| `activate.sh` | 快速激活环境 | 本地路径可按需改 |
 
 ### `collect/` - 数据采集
 
 | 脚本 | 功能 |
 |------|------|
-| collect_data_action_correlated.py | 动作相关性采集（可配置） |
-| verify_data_action_focused.py | 采集质量验证 |
-| utils.py | 采集辅助函数 |
+| `collect_data_action_correlated.py` | 动作相关性采集主脚本 |
+| `verify_data_action_focused.py` | 采集后质量验证 |
+| `utils.py` | 采集辅助函数 |
 
 ### `train/` - 训练脚本
 
 | 脚本 | 功能 |
 |------|------|
-| train_vqvae_v2.py | 训练 VQ-VAE v2 |
-| train_world_model.py | 训练 World Model（Teacher Forcing） |
-| train_world_model_ss.py | 训练 Scheduled Sampling 版本 |
+| `train_vqvae_v2.py` | VQ-VAE v2 训练 |
+| `train_vqvae_v3.py` | VQ-VAE v3 / f=8 主训练脚本 |
+| `train_world_model.py` | World Model 训练（当前含 AdaLN-Zero + ActionAux + rollout） |
+| `train_world_model_ss.py` | Scheduled Sampling 训练 |
+| `config.py` | 全局训练配置 |
+
+### `models/` - 模型定义
+
+| 文件 | 功能 |
+|------|------|
+| `vqvae.py` | VQ-VAE 主体 |
+| `world_model.py` | World Model 主体（条件注入与辅助头） |
+| `film.py` | FiLM 与 AdaLN-Zero 层 |
 
 ### `evaluate/` - 评估
 
 | 脚本 | 功能 |
 |------|------|
-| evaluate_world_model.py | 评估主脚本 |
-| metrics.py | 指标实现 |
-| visualize_results.py | 评估结果可视化 |
+| `evaluate_world_model.py` | 主评估脚本（PSNR/SSIM/LPIPS/FID/FVD + collapse 指标） |
+| `metrics.py` | 指标实现 |
+| `visualize_results.py` | 评估结果可视化 |
 
-### `visualize/` - 可视化/梦境生成
-
-| 脚本 | 功能 |
-|------|------|
-| dream.py | WASD 动作序列生成视频 |
-
-### `tools/` - 分析工具（4个）
+### `tools/` - 分析工具（当前）
 
 | 工具 | 功能 |
 |------|------|
-| analyze_ss_training.py | SS 训练分析 |
-| analyze_video_quality.py | 视频质量衰减分析 |
-| training_roadmap.py | 训练路线图/记录 |
+| `analyze_ss_training.py` | SS 训练分析 |
+| `analyze_video_quality.py` | 视频质量衰减分析 |
 
-### `utils/` - 核心库
+### `utils/` - 核心工具
 
 | 工具 | 功能 |
 |------|------|
-| dataset.py | 数据加载与采样 |
-| diagnose_model.py | 模型诊断 |
-| export_tokens_v2.py | 导出 VQ-VAE tokens |
-| generate_videos.py | 生成预测视频 |
-| generate_figures.py | 生成论文图表 |
-| extract_loss_from_logs.py | 训练日志解析 |
-| extract_vqvae_loss.py | VQ-VAE 损失提取 |
+| `dataset.py` | 数据加载/采样（含 episode 过滤、A/B 分层、rollout future targets） |
+| `export_tokens_v2.py` | tokens 导出 |
+| `generate_videos.py` | 预测视频生成 |
+| `diagnose_model.py` | 模型诊断 |
+| `generate_figures.py` | 图表生成 |
+| `extract_loss_from_logs.py` | 日志提取 |
+| `extract_vqvae_loss.py` | VQ-VAE 日志提取 |
 
-### `data/` - 数据
+## 核心数据路径
 
-```
+```text
 data/
-├── raw/               # 基础采集数据
-├── raw_action_corr_v2/    # 动作相关性（旧版）
-├── raw_action_corr_v3/    # 动作相关性（当前主用）
-├── tokens_raw/            # tokens_actions.npz
-├── tokens_action_corr_v2/ # tokens_actions.npz
-└── tokens_action_corr_f8/ # tokens_actions.npz（可选，f=8）
+├── raw/                      # 基础采集
+├── raw_action_corr_v2/       # 旧版动作相关采集
+├── raw_action_corr_f8/       # 当前主线采集
+├── tokens_raw/
+├── tokens_action_corr_v2/
+└── tokens_action_corr_f8/    # 当前主线 token
 ```
 
-### `checkpoints/` - 模型权重
+## 核心权重路径
 
-```
+```text
 checkpoints/
 ├── vqvae/
 │   ├── vqvae_v2/
+│   ├── vqvae_action_corr/
 │   ├── vqvae_action_corr_v2/
-│   └── vqvae_action_corr_f8/   # 可选 f=8
+│   └── vqvae_action_corr_f8/          # 当前主线 VQ-VAE
 ├── wm/
 │   ├── world_model/
+│   ├── world_model_v2/
+│   ├── world_model_v4/
 │   ├── world_model_v5/
-│   └── world_model_v4/
+│   ├── world_model_f8/                # 旧版 f8 基线
+│   └── world_model_f8_adaln_aux/      # 当前主线 WM
 └── wm_ss/
-    ├── world_model_v5_ss/
-    ├── world_model_v5_ss_fast/
-    └── world_model_v4_ss_e029/
 ```
 
-### `outputs/` - 输出目录
+## 日志目录（已重构）
 
+```text
+logs/
+├── data_collect/
+├── train_vqvae/
+├── train_wm/
+└── train_ss/
 ```
+
+## 输出目录
+
+```text
 outputs/
-├── evaluations/    # 评估结果 (.json)
-├── videos/         # 生成视频 (.mp4)
-├── analysis/       # 分析图表 (.png)
-└── figures/        # 论文图表 (.png)
+├── evaluations/
+├── videos/
+├── analysis/
+├── debug/
+└── figures/
 ```
 
-### `logs/` - 训练日志
+## 设计原则
 
-- 日志按类别归档到子目录：
-  - `logs/train_wm/`（WM 训练）
-  - `logs/train_ss/`（SS 训练）
-  - `logs/train_vqvae/`（VQ-VAE 训练）
-  - `logs/data_collect/`（采集日志）
-- 示例：`logs/train_wm/train_world_model_v5.log`、`logs/train_ss/train_wm_v4_ss_e029.log`
+- 主线优先：`f8 + AdaLN-Zero + ActionAux + rollout`
+- 旧模型可回退：保留 `best.pth` 即可
+- 日志分层：按训练类型分类归档
 
-## 🎯 设计原则
-
-- **统一入口**：日常使用优先 `./bin/model_tools.sh`
-- **层次清晰**：bin（入口）→ tools/utils（工具库）→ train/evaluate/visualize（业务脚本）
-- **输出集中**：所有可视化与评估产物都写入 `outputs/`
-
-## 📋 常用命令速查
+## 常用命令
 
 ```bash
-# 启动 CARLA
-./bin/start_carla_server.sh
-
-# 查看训练状态
-./bin/model_tools.sh status
+# 查看 wm 主线训练趋势
+rg -n "Epoch [0-9]+:|  Loss:|  CE:|  Contrast:|  ActionAux:|  Rollout:|Rollout Weight:" logs/train_wm/train_world_model_f8_adaln_aux.log | tail -n 160
 
 # 快速评估
-./bin/model_tools.sh eval
-
-# 生成视频
-./bin/model_tools.sh video 30
-
-# WASD 梦境
-./bin/model_tools.sh dream actions.txt
+python evaluate/evaluate_world_model.py --help
 ```
-
-## 📚 文档
-
-- **[README.md](README.md)** - 项目主文档
-- **[QUICKSTART.md](QUICKSTART.md)** - 快速开始
-- **[INSTALL_SERVER.md](INSTALL_SERVER.md)** - CARLA 服务器安装
-- **[CHANGELOG.md](CHANGELOG.md)** - 变更日志
 
 ---
 
-### `legacy/` - 历史脚本（实验留存）
-
-| 目录 | 文件 |
-|------|------|
-| legacy/bin | test_wasd.sh |
-| legacy/collect | collect_data.py |
-| legacy/train | train_vqvae.py |
-| legacy/models | vqvae.py |
-| legacy/visualize | compare_video.py |
-| legacy/tools | analyze_action_data.py |
-
-**最后更新**: 2026-01-29
+最后更新：2026-02-11

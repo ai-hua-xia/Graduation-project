@@ -30,6 +30,72 @@ from train.config import WM_CONFIG
 from evaluate.metrics import VideoMetrics
 
 
+def compute_visual_stats(frames):
+    """计算一组RGB帧的平均清晰度与纹理熵。"""
+    sharpness_vals = []
+    entropy_vals = []
+
+    for frame in frames:
+        if frame.dtype != np.uint8:
+            frame = np.clip(frame, 0, 255).astype(np.uint8)
+        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+
+        # 清晰度：Laplacian方差
+        sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        sharpness_vals.append(sharpness)
+
+        # 纹理信息量：灰度熵
+        hist = cv2.calcHist([gray], [0], None, [256], [0, 256]).ravel()
+        hist_sum = float(hist.sum())
+        if hist_sum > 0:
+            hist = hist / hist_sum
+            probs = hist[hist > 0]
+            entropy = float(-(probs * np.log2(probs)).sum())
+        else:
+            entropy = 0.0
+        entropy_vals.append(entropy)
+
+    return float(np.mean(sharpness_vals)), float(np.mean(entropy_vals))
+
+
+def compute_visual_collapse_metrics(metrics_over_steps, sharpness_ratio_thresh=0.30, entropy_ratio_thresh=0.50):
+    """基于sharpness/entropy检测画面崩溃点。"""
+    steps = np.array(metrics_over_steps['step'])
+    sharpness = np.array(metrics_over_steps.get('sharpness', []), dtype=np.float64)
+    entropy = np.array(metrics_over_steps.get('entropy', []), dtype=np.float64)
+
+    if sharpness.size == 0 or entropy.size == 0:
+        return {
+            'blur_collapse_frame': -1,
+            'texture_collapse_frame': -1,
+            'sharpness_decay_rate': 0.0,
+            'entropy_decay_rate': 0.0,
+            'sharpness_ratio_last': 1.0,
+            'entropy_ratio_last': 1.0,
+        }
+
+    base_sharp = float(max(sharpness[0], 1e-6))
+    base_entropy = float(max(entropy[0], 1e-6))
+    sharp_ratio = sharpness / base_sharp
+    entropy_ratio = entropy / base_entropy
+
+    def first_below(ratio, thresh):
+        idx = np.where(ratio < thresh)[0]
+        return int(steps[idx[0]]) if len(idx) > 0 else -1
+
+    sharp_decay = float((sharpness[0] - sharpness[-1]) / max(len(sharpness), 1))
+    entropy_decay = float((entropy[0] - entropy[-1]) / max(len(entropy), 1))
+
+    return {
+        'blur_collapse_frame': first_below(sharp_ratio, sharpness_ratio_thresh),
+        'texture_collapse_frame': first_below(entropy_ratio, entropy_ratio_thresh),
+        'sharpness_decay_rate': sharp_decay,
+        'entropy_decay_rate': entropy_decay,
+        'sharpness_ratio_last': float(sharp_ratio[-1]),
+        'entropy_ratio_last': float(entropy_ratio[-1]),
+    }
+
+
 def compute_stability_metrics(metrics_over_steps):
     """
     计算长期稳定性指标
@@ -144,7 +210,7 @@ def decode_tokens_to_frame(vqvae, tokens, device):
         return frame
 
 
-def evaluate_single_step(vqvae, world_model, tokens, actions, device, num_samples=100):
+def evaluate_single_step(vqvae, world_model, tokens, actions, device, metrics_calc, num_samples=100):
     """
     评估单步预测准确率
 
@@ -153,8 +219,6 @@ def evaluate_single_step(vqvae, world_model, tokens, actions, device, num_sample
         metrics: 图像质量指标
     """
     context_frames = world_model.context_frames
-    metrics_calc = VideoMetrics(device=device, use_lpips=True, use_fid=True)
-
     correct_tokens = 0
     total_tokens = 0
     pred_frames = []
@@ -182,7 +246,9 @@ def evaluate_single_step(vqvae, world_model, tokens, actions, device, num_sample
             # 预测
             logits = world_model(context_tokens, action_window)
             pred_token = logits.argmax(dim=-1).squeeze(0).cpu().numpy()
-            pred_token = pred_token.reshape(16, 16)
+            # 兼容不同token网格尺寸（如f=16对应16x16，f=8对应32x32）
+            if pred_token.ndim == 1 and target_token.ndim == 2:
+                pred_token = pred_token.reshape(target_token.shape)
 
             # 计算token准确率
             correct_tokens += (pred_token == target_token).sum()
@@ -209,8 +275,9 @@ def evaluate_single_step(vqvae, world_model, tokens, actions, device, num_sample
 
 
 def evaluate_autoregressive(
-    vqvae, world_model, tokens, actions, device,
-    num_sequences=10, sequence_length=50, temperature=0.7, top_k=50
+    vqvae, world_model, tokens, actions, device, metrics_calc,
+    num_sequences=10, sequence_length=50, temperature=0.7, top_k=50,
+    fvd_clip_len=16, fvd_max_videos=None
 ):
     """
     评估自回归生成质量（误差累积分析）
@@ -220,8 +287,6 @@ def evaluate_autoregressive(
         overall_metrics: 整体指标
     """
     context_frames = world_model.context_frames
-    metrics_calc = VideoMetrics(device=device, use_lpips=True, use_fid=True)
-
     all_pred_frames = []
     all_real_frames = []
 
@@ -295,6 +360,8 @@ def evaluate_autoregressive(
         'step': [],
         'psnr': [],
         'ssim': [],
+        'sharpness': [],
+        'entropy': [],
     }
 
     for t in range(sequence_length):
@@ -303,19 +370,31 @@ def evaluate_autoregressive(
 
         psnr = metrics_calc.compute_psnr(pred_t, real_t)
         ssim = metrics_calc.compute_ssim(pred_t, real_t)
+        sharpness, entropy = compute_visual_stats(pred_t)
 
         metrics_over_steps['step'].append(t)
         metrics_over_steps['psnr'].append(float(psnr))
         metrics_over_steps['ssim'].append(float(ssim))
+        metrics_over_steps['sharpness'].append(float(sharpness))
+        metrics_over_steps['entropy'].append(float(entropy))
 
     # 计算整体指标
     all_pred_flat = all_pred_frames.reshape(-1, *all_pred_frames.shape[2:])
     all_real_flat = all_real_frames.reshape(-1, *all_real_frames.shape[2:])
     overall_metrics = metrics_calc.compute_all_metrics(all_pred_flat, all_real_flat)
+    if metrics_calc.use_fvd:
+        overall_metrics['fvd'] = metrics_calc.compute_fvd(
+            all_pred_frames,
+            all_real_frames,
+            clip_len=fvd_clip_len,
+            max_videos=fvd_max_videos,
+        )
 
     # 计算长期稳定性指标
     stability_metrics = compute_stability_metrics(metrics_over_steps)
+    visual_collapse_metrics = compute_visual_collapse_metrics(metrics_over_steps)
     overall_metrics.update(stability_metrics)
+    overall_metrics.update(visual_collapse_metrics)
 
     return metrics_over_steps, overall_metrics
 
@@ -387,6 +466,14 @@ def main():
                         help='Number of sequences for autoregressive evaluation')
     parser.add_argument('--sequence-length', type=int, default=50,
                         help='Length of each autoregressive sequence')
+    parser.add_argument('--no-fid', action='store_true',
+                        help='Disable FID/R-FID computation')
+    parser.add_argument('--no-fvd', action='store_true',
+                        help='Disable FVD computation')
+    parser.add_argument('--fvd-clip-len', type=int, default=16,
+                        help='Temporal clip length used for FVD features')
+    parser.add_argument('--fvd-max-videos', type=int, default=32,
+                        help='Max number of videos used for FVD (reduce for speed)')
 
     args = parser.parse_args()
 
@@ -411,6 +498,12 @@ def main():
         device,
         num_embeddings=num_embeddings,
     )
+    metrics_calc = VideoMetrics(
+        device=device,
+        use_lpips=True,
+        use_fid=not args.no_fid,
+        use_fvd=not args.no_fvd,
+    )
 
     results = {}
 
@@ -419,7 +512,7 @@ def main():
     print("1. Single-Step Prediction Evaluation")
     print("="*60)
     single_step_results = evaluate_single_step(
-        vqvae, world_model, tokens, actions, device,
+        vqvae, world_model, tokens, actions, device, metrics_calc,
         num_samples=args.num_samples
     )
     results['single_step'] = single_step_results
@@ -429,7 +522,9 @@ def main():
     print(f"SSIM: {single_step_results['ssim']:.4f}")
     if 'lpips' in single_step_results:
         print(f"LPIPS: {single_step_results['lpips']:.4f}")
-    if 'rfid' in single_step_results and single_step_results['rfid'] >= 0:
+    if 'fid' in single_step_results and single_step_results['fid'] >= 0:
+        print(f"FID: {single_step_results['fid']:.2f}")
+    elif 'rfid' in single_step_results and single_step_results['rfid'] >= 0:
         print(f"R-FID: {single_step_results['rfid']:.2f}")
 
     # 2. 自回归生成评估
@@ -437,9 +532,11 @@ def main():
     print("2. Autoregressive Generation Evaluation")
     print("="*60)
     metrics_over_steps, ar_overall = evaluate_autoregressive(
-        vqvae, world_model, tokens, actions, device,
+        vqvae, world_model, tokens, actions, device, metrics_calc,
         num_sequences=args.num_sequences,
-        sequence_length=args.sequence_length
+        sequence_length=args.sequence_length,
+        fvd_clip_len=args.fvd_clip_len,
+        fvd_max_videos=args.fvd_max_videos,
     )
     results['autoregressive'] = {
         'over_steps': metrics_over_steps,
@@ -448,8 +545,12 @@ def main():
 
     print(f"\nOverall PSNR: {ar_overall['psnr']:.2f} dB")
     print(f"Overall SSIM: {ar_overall['ssim']:.4f}")
-    if 'rfid' in ar_overall and ar_overall['rfid'] >= 0:
+    if 'fid' in ar_overall and ar_overall['fid'] >= 0:
+        print(f"Overall FID: {ar_overall['fid']:.2f}")
+    elif 'rfid' in ar_overall and ar_overall['rfid'] >= 0:
         print(f"Overall R-FID: {ar_overall['rfid']:.2f}")
+    if 'fvd' in ar_overall and ar_overall['fvd'] >= 0:
+        print(f"Overall FVD: {ar_overall['fvd']:.2f}")
 
     # 显示稳定性指标
     print("\nLong-term Stability Metrics:")
@@ -465,6 +566,14 @@ def main():
 
     print(f"  PSNR Decay Rate: {ar_overall['psnr_decay_rate']:.4f} dB/frame")
     print(f"  Stability Score: {ar_overall['stability_score']:.1f}/100")
+    if ar_overall.get('blur_collapse_frame', -1) > 0:
+        print(f"  Blur Collapse Frame: {ar_overall['blur_collapse_frame']} (sharpness ratio < 0.30)")
+    else:
+        print(f"  Blur Collapse Frame: Not collapsed within {args.sequence_length} frames")
+    if ar_overall.get('texture_collapse_frame', -1) > 0:
+        print(f"  Texture Collapse Frame: {ar_overall['texture_collapse_frame']} (entropy ratio < 0.50)")
+    else:
+        print(f"  Texture Collapse Frame: Not collapsed within {args.sequence_length} frames")
 
     print("\nPSNR degradation over time:")
     for i in range(0, len(metrics_over_steps['step']), 10):
@@ -501,14 +610,24 @@ def main():
     print("="*60)
     print(f"Single-step Token Accuracy: {single_step_results['token_accuracy']:.4f}")
     print(f"Single-step PSNR: {single_step_results['psnr']:.2f} dB")
-    if 'rfid' in single_step_results and single_step_results['rfid'] >= 0:
+    if 'fid' in single_step_results and single_step_results['fid'] >= 0:
+        print(f"Single-step FID: {single_step_results['fid']:.2f}")
+    elif 'rfid' in single_step_results and single_step_results['rfid'] >= 0:
         print(f"Single-step R-FID: {single_step_results['rfid']:.2f}")
     print(f"Autoregressive PSNR (avg): {ar_overall['psnr']:.2f} dB")
-    if 'rfid' in ar_overall and ar_overall['rfid'] >= 0:
+    if 'fid' in ar_overall and ar_overall['fid'] >= 0:
+        print(f"Autoregressive FID (avg): {ar_overall['fid']:.2f}")
+    elif 'rfid' in ar_overall and ar_overall['rfid'] >= 0:
         print(f"Autoregressive R-FID (avg): {ar_overall['rfid']:.2f}")
+    if 'fvd' in ar_overall and ar_overall['fvd'] >= 0:
+        print(f"Autoregressive FVD: {ar_overall['fvd']:.2f}")
     print(f"PSNR at step 0: {metrics_over_steps['psnr'][0]:.2f} dB")
     print(f"PSNR at step {args.sequence_length-1}: {metrics_over_steps['psnr'][-1]:.2f} dB")
     print(f"PSNR degradation: {metrics_over_steps['psnr'][0] - metrics_over_steps['psnr'][-1]:.2f} dB")
+    if 'sharpness' in metrics_over_steps and len(metrics_over_steps['sharpness']) > 0:
+        print(f"Sharpness ratio (last/first): {ar_overall.get('sharpness_ratio_last', 1.0):.4f}")
+    if 'entropy' in metrics_over_steps and len(metrics_over_steps['entropy']) > 0:
+        print(f"Entropy ratio (last/first): {ar_overall.get('entropy_ratio_last', 1.0):.4f}")
     print(f"\nStability:")
     if ar_overall['collapse_frame'] > 0:
         print(f"  Collapsed at frame {ar_overall['collapse_frame']}")

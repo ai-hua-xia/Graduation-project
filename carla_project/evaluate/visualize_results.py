@@ -135,10 +135,16 @@ def plot_summary_table(results: dict, output_dir: Path):
             data.append(['LPIPS', f"{single.get('lpips', 0):.4f}",
                          f"{ar.get('lpips', 0):.4f}",
                          f"{ar.get('lpips', 0) - single.get('lpips', 0):.4f}"])
+        if 'fid' in single and single.get('fid', -1) >= 0:
+            data.append(['FID', f"{single.get('fid', 0):.2f}",
+                         f"{ar.get('fid', 0):.2f}",
+                         f"{ar.get('fid', 0) - single.get('fid', 0):.2f}"])
         if 'rfid' in single:
             data.append(['R-FID', f"{single.get('rfid', 0):.2f}",
                          f"{ar.get('rfid', 0):.2f}",
                          f"{ar.get('rfid', 0) - single.get('rfid', 0):.2f}"])
+        if 'fvd' in ar and ar.get('fvd', -1) >= 0:
+            data.append(['FVD', '-', f"{ar.get('fvd', 0):.2f}", '-'])
 
         # 添加稳定性指标
         data.append(['', '', '', ''])  # 空行

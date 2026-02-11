@@ -6,7 +6,7 @@ World Model - Transformer with FiLM
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .film import FiLMedTransformerLayer
+from .film import FiLMedTransformerLayer, AdaLNZeroTransformerLayer
 
 
 class WorldModel(nn.Module):
@@ -33,6 +33,8 @@ class WorldModel(nn.Module):
         use_memory=False,
         memory_dim=256,
         dropout=0.1,
+        conditioning_type='adaln_zero',
+        use_action_aux=False,
     ):
         super().__init__()
 
@@ -42,6 +44,8 @@ class WorldModel(nn.Module):
         self.hidden_dim = hidden_dim
         self.use_memory = use_memory
         self.memory_dim = memory_dim
+        self.conditioning_type = conditioning_type
+        self.use_action_aux = use_action_aux
 
         # Token embedding
         self.token_embedding = nn.Embedding(num_embeddings, embed_dim)
@@ -73,9 +77,10 @@ class WorldModel(nn.Module):
             self.memory_to_hidden = nn.Linear(memory_dim, hidden_dim)
             self.memory_pos_embedding = nn.Parameter(torch.zeros(1, 1, hidden_dim))
 
-        # FiLMed Transformer层
+        # 条件 Transformer 层
+        layer_cls = AdaLNZeroTransformerLayer if conditioning_type == 'adaln_zero' else FiLMedTransformerLayer
         self.transformer_layers = nn.ModuleList([
-            FiLMedTransformerLayer(hidden_dim, num_heads, hidden_dim, dropout)
+            layer_cls(hidden_dim, num_heads, hidden_dim, dropout)
             for _ in range(num_layers)
         ])
 
@@ -85,7 +90,24 @@ class WorldModel(nn.Module):
             nn.Linear(hidden_dim, num_embeddings),
         )
 
-    def forward(self, token_seq, action_seq, memory=None, return_features=False, return_memory=False):
+        # 动作辅助预测头：帮助模型显式学习动作条件语义
+        self.action_aux_head = nn.Sequential(
+            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, action_dim),
+        )
+
+    def forward(
+        self,
+        token_seq,
+        action_seq,
+        memory=None,
+        return_features=False,
+        return_memory=False,
+        action_scale=1.0,
+        return_action_pred=False,
+    ):
         """
         Args:
             token_seq: (B, context_frames, H, W) - token索引
@@ -112,6 +134,7 @@ class WorldModel(nn.Module):
         # 编码动作
         action_seq_flat = action_seq.view(B, -1)  # (B, context_frames * action_dim)
         action_embedding = self.action_encoder(action_seq_flat)  # (B, hidden_dim)
+        action_embedding = action_embedding * float(action_scale)
 
         memory_next = None
         if self.use_memory:
@@ -137,13 +160,18 @@ class WorldModel(nn.Module):
         # 输出logits
         logits = self.output_proj(x_next)  # (B, tokens_per_frame, num_embeddings)
 
-        if return_features and return_memory:
-            return logits, x_next, memory_next
+        outputs = [logits]
         if return_features:
-            return logits, x_next
+            outputs.append(x_next)
         if return_memory:
-            return logits, memory_next
-        return logits
+            outputs.append(memory_next)
+        if return_action_pred:
+            action_pred = self.action_aux_head(x_next.mean(dim=1))
+            outputs.append(action_pred)
+
+        if len(outputs) == 1:
+            return outputs[0]
+        return tuple(outputs)
 
     def predict_next_frame(self, token_seq, action_seq, memory=None, temperature=1.0, top_k=None, return_memory=False):
         """
