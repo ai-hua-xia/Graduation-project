@@ -1,0 +1,7 @@
+model,ar_psnr,ar_ssim,ar_lpips,ar_fvd,action_sens_mean_norm,action_sensitivity_std_norm,structure_note,source
+FiLM baseline,14.7704,0.4091,0.7440,159.2630,0.0073,0.0036,FiLM 条件注入,compact_action_norm_recompute_mean_std_20260505_211208/summary.json
+AdaLN-only,18.9038,0.6972,0.3400,49.4485,0.0647,0.0405,仅替换条件注入,adaln_only_50step_20260509/adaln_only_50step.json
+AdaLN+Rollout,18.9844,0.7012,0.3454,47.7758,0.2042,0.1473,短 rollout，保留记忆,adaln_rollout_monitor_20260509/best_mtime1778324717/best_mtime1778324717_50step_summary.json
+AdaLN+ActionAux,19.2857,0.7259,0.2832,14.9716,1.5690,0.6006,动作辅助监督,compact_action_norm_recompute_mean_std_20260505_211208/summary.json
+AdaLN+ActionAux+Rollout w/o Memory,19.5085,0.7399,0.2881,34.9359,0.2884,0.2226,去除记忆模块,wo_memory_scratch_current_50step_20260509/wo_memory_scratch_current_50step_summary.json
+AdaLN+ActionAux+Rollout+Memory,21.7316,0.7775,0.2015,12.1209,1.8242,0.7598,最终组合,recomputed_action_consistency_final_20260512.json

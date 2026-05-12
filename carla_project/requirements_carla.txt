@@ -1,7 +1,7 @@
 # CARLA World Model - Python Dependencies
 
 # ============= CARLA =============
-carla==0.9.15  # CARLA Python API（需要与服务器版本匹配）
+carla==0.9.16  # CARLA Python API（需要与服务器版本匹配）
 
 # ============= Deep Learning =============
 torch>=2.0.0

@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
-[![CARLA](https://img.shields.io/badge/CARLA-0.9.15-green.svg)](https://carla.org/)
+[![CARLA](https://img.shields.io/badge/CARLA-0.9.16-green.svg)](https://carla.org/)
 [![License](https://img.shields.io/badge/License-待定-yellow.svg)]()
 
 ## 🎯 项目概述
@@ -182,7 +182,7 @@ python -m http.server 8000
 
 | 特性 | MetaDrive项目 | CARLA项目 |
 |------|--------------|-----------|
-| **模拟器** | MetaDrive | CARLA 0.9.15 |
+| **模拟器** | MetaDrive | CARLA 0.9.16 |
 | **数据规模** | 中等 | 10,000帧 |
 | **模型规模** | 小型 | 238M参数 |
 | **特色功能** | 风格迁移（夜晚/雾/雪） | WASD键盘控制 |
@@ -270,7 +270,7 @@ python -m http.server 8000
 - Python 3.8+
 - PyTorch 2.0+
 - CUDA 11.8+
-- CARLA 0.9.15
+- CARLA 0.9.16
 
 ### MetaDrive项目
 - Python 3.8+

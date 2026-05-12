@@ -55,6 +55,16 @@ def get_sampling_prob(epoch, total_epochs, schedule='linear', k=0.5):
         return progress * k
 
 
+def get_action_aux_weight(epoch, config):
+    start = config.get('action_aux_weight_start', 0.0)
+    end = config.get('action_aux_weight_end', 0.0)
+    warmup_epochs = config.get('action_aux_warmup_epochs', 0)
+    if warmup_epochs <= 0:
+        return end
+    progress = min(max(epoch, 0) / float(warmup_epochs), 1.0)
+    return start + (end - start) * progress
+
+
 def should_apply_action_contrast(prob, device):
     if prob >= 1.0:
         return True
@@ -127,16 +137,31 @@ def train_epoch_with_ss(
     total_loss = 0
     total_ce_loss = 0
     total_contrast_loss = 0
+    total_action_aux_loss = 0
     num_batches = 0
+    action_aux_weight = get_action_aux_weight(epoch, config)
+    max_steps = config.get('max_steps_per_epoch')
+    total_steps = min(len(dataloader), max_steps) if max_steps is not None else len(dataloader)
+    iterator = dataloader
+    if max_steps is not None:
+        import itertools
+        iterator = itertools.islice(dataloader, max_steps)
 
     # Gradient accumulation steps
     accum_steps = 4
 
-    pbar = tqdm(dataloader, desc=f"Epoch {epoch} (ss_prob={sampling_prob:.3f})", disable=not is_main)
+    pbar = tqdm(
+        iterator,
+        desc=f"Epoch {epoch} (ss_prob={sampling_prob:.3f})",
+        total=total_steps,
+        disable=not is_main,
+    )
 
     optimizer.zero_grad()
 
+    last_batch_idx = -1
     for batch_idx, batch in enumerate(pbar):
+        last_batch_idx = batch_idx
         # batch包含连续序列
         tokens_seq = batch['tokens'].to(device)  # (B, seq_len, H, W)
         actions_seq = batch['actions'].to(device)  # (B, seq_len, action_dim)
@@ -155,11 +180,14 @@ def train_epoch_with_ss(
         batch_ce_loss = 0
         num_predictions = 0
         batch_contrast_loss = 0.0
+        batch_action_aux_loss = 0.0
         use_contrast = (
             config.get('action_contrast_weight', 0.0) > 0
             and should_apply_action_contrast(config.get('action_contrast_prob', 1.0), device)
         )
-        use_memory = getattr(model, 'use_memory', False)
+        base_model = unwrap_model(model)
+        use_memory = getattr(base_model, 'use_memory', False)
+        use_action_aux = config.get('use_action_aux', False)
 
         sync_context = contextlib.nullcontext()
         if distributed and (batch_idx + 1) % accum_steps != 0:
@@ -172,6 +200,7 @@ def train_epoch_with_ss(
             for t in range(context_frames, seq_len):
                 # 目标token
                 target_token = tokens_seq[:, t]  # (B, H, W)
+                target_action = actions_seq[:, t]
 
                 # 动作窗口
                 action_window = actions_seq[:, t-context_frames:t]  # (B, context_frames, action_dim)
@@ -181,13 +210,28 @@ def train_epoch_with_ss(
                 if config['use_amp']:
                     with autocast(dtype=torch.bfloat16 if config['amp_dtype'] == 'bf16' else torch.float16):
                         # 前向传播
-                        if use_memory:
+                        if use_memory and use_action_aux:
+                            logits, memory_next, action_pred = model(
+                                token_buffer,
+                                action_window,
+                                memory=memory_input,
+                                return_memory=True,
+                                return_action_pred=True,
+                            )
+                        elif use_memory:
                             logits, memory_next = model(
                                 token_buffer, action_window, memory=memory_input, return_memory=True
                             )
+                            action_pred = None
+                        elif use_action_aux:
+                            logits, action_pred = model(
+                                token_buffer, action_window, return_action_pred=True
+                            )
+                            memory_next = None
                         else:
                             logits = model(token_buffer, action_window)  # (B, tokens_per_frame, vocab)
                             memory_next = None
+                            action_pred = None
 
                         # 计算损失
                         B_curr, T, V = logits.shape
@@ -196,23 +240,47 @@ def train_epoch_with_ss(
                             logits.reshape(B_curr * T, V),
                             target_flat.reshape(B_curr * T)
                         )
+                        action_aux_loss = torch.tensor(0.0, device=device)
+                        if action_pred is not None:
+                            action_aux_loss = nn.functional.smooth_l1_loss(action_pred, target_action)
                 else:
-                    if use_memory:
+                    if use_memory and use_action_aux:
+                        logits, memory_next, action_pred = model(
+                            token_buffer,
+                            action_window,
+                            memory=memory_input,
+                            return_memory=True,
+                            return_action_pred=True,
+                        )
+                    elif use_memory:
                         logits, memory_next = model(
                             token_buffer, action_window, memory=memory_input, return_memory=True
                         )
+                        action_pred = None
+                    elif use_action_aux:
+                        logits, action_pred = model(
+                            token_buffer, action_window, return_action_pred=True
+                        )
+                        memory_next = None
                     else:
                         logits = model(token_buffer, action_window)
                         memory_next = None
+                        action_pred = None
                     B_curr, T, V = logits.shape
                     target_flat = target_token.reshape(B_curr, -1)
                     ce_loss = nn.functional.cross_entropy(
                         logits.reshape(B_curr * T, V),
                         target_flat.reshape(B_curr * T)
                     )
+                    action_aux_loss = torch.tensor(0.0, device=device)
+                    if action_pred is not None:
+                        action_aux_loss = nn.functional.smooth_l1_loss(action_pred, target_action)
 
-                step_loss = ce_loss / (seq_len - context_frames)
+                step_loss = (
+                    ce_loss + action_aux_weight * action_aux_loss
+                ) / (seq_len - context_frames)
                 batch_ce_loss += ce_loss.item()
+                batch_action_aux_loss += action_aux_loss.item()
                 num_predictions += 1
 
                 # 动作对比正则（仅在第一步做一次，降低开销）
@@ -292,16 +360,19 @@ def train_epoch_with_ss(
             total_loss += batch_loss_value
             total_ce_loss += batch_ce_loss / num_predictions
             total_contrast_loss += batch_contrast_loss
+            total_action_aux_loss += batch_action_aux_loss / num_predictions
             num_batches += 1
 
         if is_main and batch_idx % config['log_every'] == 0:
             pbar.set_postfix({
                 'loss': f"{batch_ce_loss / max(num_predictions, 1):.4f}",
                 'contrast': f"{batch_contrast_loss:.4f}",
+                'a_aux': f"{batch_action_aux_loss / max(num_predictions, 1):.4f}",
+                'aux_w': f"{action_aux_weight:.3f}",
             })
 
     # 处理最后不足accum_steps的梯度
-    if (batch_idx + 1) % accum_steps != 0:
+    if last_batch_idx >= 0 and (last_batch_idx + 1) % accum_steps != 0:
         if config['use_amp']:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -315,21 +386,23 @@ def train_epoch_with_ss(
     avg_loss = total_loss / max(num_batches, 1)
     avg_ce = total_ce_loss / max(num_batches, 1)
     avg_contrast = total_contrast_loss / max(num_batches, 1)
+    avg_action_aux = total_action_aux_loss / max(num_batches, 1)
 
-    return avg_loss, avg_ce, avg_contrast
+    return avg_loss, avg_ce, avg_contrast, avg_action_aux
 
 
 def unwrap_model(model):
     return model.module if hasattr(model, "module") else model
 
 
-def save_checkpoint(model, optimizer, epoch, loss, save_path):
+def save_checkpoint(model, optimizer, epoch, loss, save_path, config=None):
     """保存checkpoint"""
     torch.save({
         'epoch': epoch,
         'model_state_dict': unwrap_model(model).state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
+        'config': dict(config) if config is not None else None,
     }, save_path)
     print(f"Saved checkpoint to {save_path}")
 
@@ -376,10 +449,29 @@ def main():
                         help='Number of epochs')
     parser.add_argument('--batch-size', type=int, default=32,
                         help='Batch size')
+    parser.add_argument('--lr', type=float, default=None,
+                        help='Override learning rate')
+    parser.add_argument('--max-steps-per-epoch', type=int, default=None,
+                        help='Override max training steps per epoch')
     parser.add_argument('--seq-len', type=int, default=16,
                         help='Sequence length for training')
     parser.add_argument('--tbptt-steps', type=int, default=1,
                         help='Backward every N steps inside a sequence')
+    parser.add_argument('--conditioning-type', choices=['film', 'adaln_zero'], default=None,
+                        help='Override action conditioning layer type')
+    parser.add_argument('--use-action-aux', dest='use_action_aux', action='store_true',
+                        help='Enable auxiliary action prediction loss during SS')
+    parser.add_argument('--no-action-aux', dest='use_action_aux', action='store_false',
+                        help='Disable auxiliary action prediction loss during SS')
+    parser.set_defaults(use_action_aux=None)
+    parser.add_argument('--action-aux-weight-start', type=float, default=None,
+                        help='Override initial auxiliary action loss weight')
+    parser.add_argument('--action-aux-weight-end', type=float, default=None,
+                        help='Override final auxiliary action loss weight')
+    parser.add_argument('--action-contrast-weight', type=float, default=None,
+                        help='Override action contrast loss weight')
+    parser.add_argument('--action-contrast-prob', type=float, default=None,
+                        help='Override action contrast application probability')
     parser.add_argument('--ss-schedule', type=str, default='linear',
                         choices=['linear', 'exponential', 'inverse_sigmoid'],
                         help='Scheduled sampling schedule')
@@ -406,6 +498,22 @@ def main():
         config['epochs'] = args.epochs
     if args.batch_size is not None:
         config['batch_size'] = args.batch_size
+    if args.lr is not None:
+        config['lr'] = args.lr
+    if args.max_steps_per_epoch is not None:
+        config['max_steps_per_epoch'] = args.max_steps_per_epoch
+    if args.conditioning_type is not None:
+        config['conditioning_type'] = args.conditioning_type
+    if args.use_action_aux is not None:
+        config['use_action_aux'] = args.use_action_aux
+    if args.action_aux_weight_start is not None:
+        config['action_aux_weight_start'] = args.action_aux_weight_start
+    if args.action_aux_weight_end is not None:
+        config['action_aux_weight_end'] = args.action_aux_weight_end
+    if args.action_contrast_weight is not None:
+        config['action_contrast_weight'] = args.action_contrast_weight
+    if args.action_contrast_prob is not None:
+        config['action_contrast_prob'] = args.action_contrast_prob
 
     # 设备/分布式
     distributed, local_rank, world_size, device = setup_distributed(args)
@@ -461,6 +569,8 @@ def main():
         use_memory=config.get('use_memory', False),
         memory_dim=config.get('memory_dim', 256),
         dropout=config['dropout'],
+        conditioning_type=config.get('conditioning_type', 'adaln_zero'),
+        use_action_aux=config.get('use_action_aux', False),
     ).to(device)
 
     if distributed:
@@ -499,6 +609,8 @@ def main():
         checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
         unwrap_model(model).load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        for pg in optimizer.param_groups:
+            pg['lr'] = config['lr']
         start_epoch = checkpoint['epoch'] + 1
 
     # 训练
@@ -519,7 +631,7 @@ def main():
         if sampler is not None:
             sampler.set_epoch(epoch)
 
-        avg_loss, avg_ce, avg_contrast = train_epoch_with_ss(
+        avg_loss, avg_ce, avg_contrast, avg_action_aux = train_epoch_with_ss(
             model,
             dataloader,
             optimizer,
@@ -536,24 +648,27 @@ def main():
         avg_loss = reduce_mean(avg_loss, device)
         avg_ce = reduce_mean(avg_ce, device)
         avg_contrast = reduce_mean(avg_contrast, device)
+        avg_action_aux = reduce_mean(avg_action_aux, device)
 
         if is_main_process():
             print(f"\nEpoch {epoch}:")
             print(f"  Loss: {avg_loss:.4f}")
             print(f"  CE: {avg_ce:.4f}")
             print(f"  Contrast: {avg_contrast:.4f}")
+            print(f"  ActionAux: {avg_action_aux:.4f}")
             print(f"  Sampling Prob: {sampling_prob:.4f}")
+            print(f"  ActionAux Weight: {get_action_aux_weight(epoch, config):.4f}")
 
             # 保存checkpoint
             if (epoch + 1) % config['save_every'] == 0:
                 save_path = save_dir / f"world_model_ss_epoch_{epoch:03d}.pth"
-                save_checkpoint(model, optimizer, epoch, avg_loss, save_path)
+                save_checkpoint(model, optimizer, epoch, avg_loss, save_path, config=config)
 
             # 保存最佳模型
             if avg_loss < best_loss:
                 best_loss = avg_loss
                 save_path = save_dir / "best.pth"
-                save_checkpoint(model, optimizer, epoch, avg_loss, save_path)
+                save_checkpoint(model, optimizer, epoch, avg_loss, save_path, config=config)
                 print(f"  New best model! Loss: {best_loss:.4f}")
 
     if is_main_process():

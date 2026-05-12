@@ -28,6 +28,7 @@ from models.vqvae_v2 import load_vqvae_v2_checkpoint
 from models.world_model import WorldModel
 from train.config import WM_CONFIG
 from evaluate.metrics import VideoMetrics
+from utils.eval_summary_utils import summarize_action_sensitivity
 
 
 def compute_visual_stats(frames):
@@ -166,7 +167,14 @@ def compute_stability_metrics(metrics_over_steps):
     return stability
 
 
-def load_models(vqvae_path, world_model_path, device, num_embeddings=None):
+def load_models(
+    vqvae_path,
+    world_model_path,
+    device,
+    num_embeddings=None,
+    conditioning_type=None,
+    use_action_aux=None,
+):
     """加载模型"""
     # VQ-VAE
     vqvae, _ = load_vqvae_v2_checkpoint(vqvae_path, device)
@@ -174,8 +182,15 @@ def load_models(vqvae_path, world_model_path, device, num_embeddings=None):
 
     # World Model
     config = WM_CONFIG.copy()
+    checkpoint = torch.load(world_model_path, map_location=device, weights_only=False)
+    checkpoint_config = checkpoint.get('config') or {}
+    config.update({k: v for k, v in checkpoint_config.items() if k in config})
     if num_embeddings is not None:
         config['num_embeddings'] = num_embeddings
+    if conditioning_type is not None:
+        config['conditioning_type'] = conditioning_type
+    if use_action_aux is not None:
+        config['use_action_aux'] = use_action_aux
     world_model = WorldModel(
         num_embeddings=config['num_embeddings'],
         embed_dim=config['embed_dim'],
@@ -188,10 +203,27 @@ def load_models(vqvae_path, world_model_path, device, num_embeddings=None):
         use_memory=config.get('use_memory', False),
         memory_dim=config.get('memory_dim', 256),
         dropout=config['dropout'],
+        conditioning_type=config.get('conditioning_type', 'adaln_zero'),
+        use_action_aux=config.get('use_action_aux', False),
     ).to(device)
 
-    checkpoint = torch.load(world_model_path, map_location=device, weights_only=False)
-    world_model.load_state_dict(checkpoint['model_state_dict'])
+    missing_keys, unexpected_keys = world_model.load_state_dict(
+        checkpoint['model_state_dict'],
+        strict=False,
+    )
+    optional_prefixes = ('action_aux_head.',)
+    critical_missing = [
+        key for key in missing_keys
+        if not key.startswith(optional_prefixes)
+    ]
+    if critical_missing or unexpected_keys:
+        raise RuntimeError(
+            'Error(s) in loading state_dict for WorldModel:\n'
+            f'\tMissing key(s): {critical_missing}\n'
+            f'\tUnexpected key(s): {unexpected_keys}'
+        )
+    if missing_keys:
+        print(f"Ignored optional missing keys: {missing_keys}")
     world_model.eval()
 
     return vqvae, world_model
@@ -406,7 +438,7 @@ def evaluate_action_consistency(
     评估动作条件一致性：相同历史+不同动作应该产生不同结果
 
     Returns:
-        action_sensitivity: 动作敏感度分数
+        action_sensitivity: 动作敏感度分数（原始KL与per-token归一化KL）
     """
     context_frames = world_model.context_frames
 
@@ -447,10 +479,10 @@ def evaluate_action_consistency(
 
             sensitivities.append(kl_div)
 
-    return {
-        'action_sensitivity_mean': float(np.mean(sensitivities)),
-        'action_sensitivity_std': float(np.std(sensitivities)),
-    }
+    return summarize_action_sensitivity(
+        sensitivities=sensitivities,
+        tokens_per_frame=world_model.tokens_per_frame,
+    )
 
 
 def main():
@@ -474,6 +506,13 @@ def main():
                         help='Temporal clip length used for FVD features')
     parser.add_argument('--fvd-max-videos', type=int, default=32,
                         help='Max number of videos used for FVD (reduce for speed)')
+    parser.add_argument('--conditioning-type', choices=['film', 'adaln_zero'], default=None,
+                        help='Override checkpoint/world model conditioning type')
+    parser.add_argument('--use-action-aux', dest='use_action_aux', action='store_true',
+                        help='Load world model with ActionAux head enabled')
+    parser.add_argument('--no-action-aux', dest='use_action_aux', action='store_false',
+                        help='Load world model with ActionAux head disabled')
+    parser.set_defaults(use_action_aux=None)
 
     args = parser.parse_args()
 
@@ -497,6 +536,8 @@ def main():
         args.world_model_checkpoint,
         device,
         num_embeddings=num_embeddings,
+        conditioning_type=args.conditioning_type,
+        use_action_aux=args.use_action_aux,
     )
     metrics_calc = VideoMetrics(
         device=device,

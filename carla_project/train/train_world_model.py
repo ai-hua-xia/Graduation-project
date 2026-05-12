@@ -165,8 +165,8 @@ def compute_rollout_loss(
         target_roll = future_tokens[:, step].view(B, -1)
 
         ce_roll = nn.functional.cross_entropy(
-            logits_roll.view(B * tokens_per_frame, vocab_size),
-            target_roll.view(B * tokens_per_frame),
+            logits_roll.reshape(B * tokens_per_frame, vocab_size),
+            target_roll.reshape(B * tokens_per_frame),
         )
         rollout_loss = rollout_loss + ce_roll
 
@@ -443,13 +443,14 @@ def unwrap_model(model):
     return model.module if hasattr(model, "module") else model
 
 
-def save_checkpoint(model, optimizer, epoch, loss, save_path):
+def save_checkpoint(model, optimizer, epoch, loss, save_path, config=None):
     """保存checkpoint"""
     torch.save({
         'epoch': epoch,
         'model_state_dict': unwrap_model(model).state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
+        'config': dict(config) if config is not None else None,
     }, save_path)
     print(f"Saved checkpoint to {save_path}")
 
@@ -496,6 +497,43 @@ def main():
                         help='Number of epochs')
     parser.add_argument('--batch-size', type=int, default=None,
                         help='Batch size')
+    parser.add_argument('--lr', type=float, default=None,
+                        help='Override learning rate')
+    parser.add_argument('--max-steps-per-epoch', type=int, default=None,
+                        help='Override max training steps per epoch')
+    parser.add_argument('--save-every', type=int, default=None,
+                        help='Override checkpoint save interval in epochs')
+    parser.add_argument('--stratified-ab', dest='stratified_ab', action='store_true',
+                        help='Enable A/B stratified sampling')
+    parser.add_argument('--no-stratified-ab', dest='stratified_ab', action='store_false',
+                        help='Disable A/B stratified sampling')
+    parser.set_defaults(stratified_ab=None)
+    parser.add_argument('--conditioning-type', choices=['film', 'adaln_zero'], default=None,
+                        help='Override action conditioning layer type')
+    parser.add_argument('--use-action-aux', dest='use_action_aux', action='store_true',
+                        help='Enable auxiliary action prediction loss')
+    parser.add_argument('--no-action-aux', dest='use_action_aux', action='store_false',
+                        help='Disable auxiliary action prediction loss')
+    parser.set_defaults(use_action_aux=None)
+    parser.add_argument('--use-memory', dest='use_memory', action='store_true',
+                        help='Enable recurrent memory token')
+    parser.add_argument('--no-memory', dest='use_memory', action='store_false',
+                        help='Disable recurrent memory token')
+    parser.set_defaults(use_memory=None)
+    parser.add_argument('--rollout-steps', type=int, default=None,
+                        help='Override short rollout supervision steps')
+    parser.add_argument('--rollout-weight-start', type=float, default=None,
+                        help='Override initial rollout loss weight')
+    parser.add_argument('--rollout-weight-end', type=float, default=None,
+                        help='Override final rollout loss weight')
+    parser.add_argument('--action-aux-weight-start', type=float, default=None,
+                        help='Override initial auxiliary action loss weight')
+    parser.add_argument('--action-aux-weight-end', type=float, default=None,
+                        help='Override final auxiliary action loss weight')
+    parser.add_argument('--action-contrast-weight-start', type=float, default=None,
+                        help='Override initial action contrast loss weight')
+    parser.add_argument('--action-contrast-weight-end', type=float, default=None,
+                        help='Override final action contrast loss weight')
     parser.add_argument('--resume', type=str, default=None,
                         help='Resume from checkpoint')
     parser.add_argument('--pretrained', type=str, default=None,
@@ -517,6 +555,34 @@ def main():
         config['epochs'] = args.epochs
     if args.batch_size is not None:
         config['batch_size'] = args.batch_size
+    if args.lr is not None:
+        config['lr'] = args.lr
+    if args.max_steps_per_epoch is not None:
+        config['max_steps_per_epoch'] = args.max_steps_per_epoch
+    if args.save_every is not None:
+        config['save_every'] = args.save_every
+    if args.stratified_ab is not None:
+        config['stratified_ab'] = args.stratified_ab
+    if args.conditioning_type is not None:
+        config['conditioning_type'] = args.conditioning_type
+    if args.use_action_aux is not None:
+        config['use_action_aux'] = args.use_action_aux
+    if args.use_memory is not None:
+        config['use_memory'] = args.use_memory
+    if args.rollout_steps is not None:
+        config['rollout_steps'] = args.rollout_steps
+    if args.rollout_weight_start is not None:
+        config['rollout_weight_start'] = args.rollout_weight_start
+    if args.rollout_weight_end is not None:
+        config['rollout_weight_end'] = args.rollout_weight_end
+    if args.action_aux_weight_start is not None:
+        config['action_aux_weight_start'] = args.action_aux_weight_start
+    if args.action_aux_weight_end is not None:
+        config['action_aux_weight_end'] = args.action_aux_weight_end
+    if args.action_contrast_weight_start is not None:
+        config['action_contrast_weight_start'] = args.action_contrast_weight_start
+    if args.action_contrast_weight_end is not None:
+        config['action_contrast_weight_end'] = args.action_contrast_weight_end
 
     # 设备/分布式
     distributed, local_rank, world_size, device = setup_distributed(args)
@@ -678,13 +744,13 @@ def main():
             # 保存checkpoint
             if (epoch + 1) % config['save_every'] == 0:
                 save_path = save_dir / f"world_model_epoch_{epoch:03d}.pth"
-                save_checkpoint(model, optimizer, epoch, avg_loss, save_path)
+                save_checkpoint(model, optimizer, epoch, avg_loss, save_path, config=config)
 
             # 保存最佳模型
             if avg_loss < best_loss:
                 best_loss = avg_loss
                 save_path = save_dir / "best.pth"
-                save_checkpoint(model, optimizer, epoch, avg_loss, save_path)
+                save_checkpoint(model, optimizer, epoch, avg_loss, save_path, config=config)
                 print(f"  New best model! Loss: {best_loss:.4f}")
 
     if is_main_process():

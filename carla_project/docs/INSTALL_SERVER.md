@@ -28,7 +28,7 @@ cd ~/CARLA_0.9.16
 
 ## 3. Python API 版本
 
-Python API 版本需要与服务器版本一致。当前仓库的 `requirements_carla.txt` 仍固定为 `carla==0.9.15`，如使用 0.9.16 服务器，请同步更新为：
+Python API 版本需要与服务器版本一致。当前仓库的 `requirements_carla.txt` 固定为 `carla==0.9.16`，与默认服务器版本一致：
 
 ```bash
 pip install carla==0.9.16

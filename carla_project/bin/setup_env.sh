@@ -77,7 +77,7 @@ echo ""
 
 # 检查CARLA
 echo "检查CARLA Python API..."
-check_package "carla" "0.9.15"
+check_package "carla" "0.9.16"
 carla_ok=$?
 
 # 如果没有CARLA，安装
@@ -86,20 +86,20 @@ if [ $carla_ok -ne 0 ]; then
     echo "CARLA未安装，准备安装..."
     echo ""
     echo "选项1：使用pip安装（推荐）"
-    echo "  pip install carla==0.9.15"
+    echo "  pip install carla==0.9.16"
     echo ""
     echo "选项2：从.whl文件安装"
-    echo "  下载：https://carla-releases.s3.us-east-005.backblazeb2.com/Linux/CARLA_0.9.15.tar.gz"
+    echo "  下载：https://carla-releases.s3.us-east-005.backblazeb2.com/Linux/CARLA_0.9.16.tar.gz"
     echo "  解压后在PythonAPI/carla/dist/目录找到对应Python版本的.whl文件"
     echo ""
 
     read -p "是否现在通过pip安装CARLA? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        pip install carla==0.9.15
+        pip install carla==0.9.16
 
         # 验证安装
-        if python -c "import carla; print('CARLA version:', carla.__version__)" 2>/dev/null; then
+        if python -c "import carla; import importlib.metadata as m; print('CARLA version:', m.version('carla'))" 2>/dev/null; then
             echo "✓ CARLA安装成功"
         else
             echo "✗ CARLA安装失败，请手动安装"
@@ -142,14 +142,14 @@ echo ""
 # 测试CARLA连接（如果安装了）
 if python -c "import carla" 2>/dev/null; then
     echo "测试CARLA Python API..."
-    python -c "import carla; print('CARLA API version:', carla.__version__)"
+    python -c "import carla; import importlib.metadata as m; print('CARLA API version:', m.version('carla'))"
     echo ""
     echo "注意：CARLA Python API已安装，但仍需要CARLA服务器！"
     echo ""
     echo "启动CARLA服务器的方法："
-    echo "  1. 下载CARLA服务器: https://github.com/carla-simulator/carla/releases/tag/0.9.15"
-    echo "  2. 解压: tar -xzf CARLA_0.9.15.tar.gz"
-    echo "  3. 运行: cd CARLA_0.9.15 && ./CarlaUE4.sh"
+    echo "  1. 下载CARLA服务器: https://github.com/carla-simulator/carla/releases/tag/0.9.16"
+    echo "  2. 解压: tar -xzf CARLA_0.9.16.tar.gz"
+    echo "  3. 运行: cd CARLA_0.9.16 && ./CarlaUE4.sh"
     echo "     或无渲染模式: ./CarlaUE4.sh -RenderOffScreen"
 fi
 
