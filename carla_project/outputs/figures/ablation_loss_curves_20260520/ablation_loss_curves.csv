@@ -1,0 +1,288 @@
+model,stage,source_log,absolute_epoch,relative_epoch,loss,ce,smooth,contrast,action_aux,rollout
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,5.0,0.0,6.0749,6.0741,0.0018,0.1536,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,6.0,1.0,6.0689,6.0679,0.002,0.1591,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,7.0,2.0,6.0718,6.0708,0.0021,0.1474,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,8.0,3.0,6.0719,6.0708,0.002,0.1427,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,9.0,4.0,6.0756,6.0743,0.0022,0.1349,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,10.0,5.0,6.0734,6.0721,0.0018,0.1315,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,11.0,6.0,6.0725,6.0712,0.002,0.1242,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,12.0,7.0,6.0728,6.0714,0.0021,0.1202,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,13.0,8.0,6.0731,6.0716,0.0024,0.1126,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,14.0,9.0,6.0706,6.069,0.0025,0.1101,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,15.0,10.0,6.0715,6.0699,0.0024,0.1073,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,16.0,11.0,6.0731,6.0714,0.0025,0.1027,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,17.0,12.0,6.0754,6.0737,0.0025,0.0994,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,18.0,13.0,6.0758,6.0741,0.0027,0.0944,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,19.0,14.0,6.0711,6.0694,0.0028,0.0926,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,20.0,15.0,6.0743,6.0725,0.003,0.0916,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,21.0,16.0,6.0769,6.075,0.0028,0.0905,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,22.0,17.0,6.0763,6.0744,0.0028,0.0888,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,23.0,18.0,6.0734,6.0715,0.003,0.0836,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,24.0,19.0,6.0732,6.0712,0.003,0.0824,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,25.0,20.0,6.0735,6.0714,0.0032,0.0803,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,26.0,21.0,6.0741,6.072,0.0032,0.0785,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,27.0,22.0,6.0746,6.0724,0.0032,0.078,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,28.0,23.0,6.0706,6.0685,0.0035,0.0758,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,29.0,24.0,6.075,6.0728,0.0033,0.0762,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,30.0,25.0,6.0716,6.0693,0.0034,0.0757,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,31.0,26.0,6.0697,6.0674,0.0037,0.0721,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,32.0,27.0,6.0747,6.0724,0.0036,0.07,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,33.0,28.0,6.0758,6.0735,0.0038,0.0695,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,34.0,29.0,6.0786,6.0763,0.0039,0.0688,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,35.0,30.0,6.0745,6.0721,0.0038,0.0667,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,36.0,31.0,6.0727,6.0702,0.0038,0.0676,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,37.0,32.0,6.0766,6.0741,0.0038,0.0675,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,38.0,33.0,6.0757,6.0731,0.0038,0.066,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,39.0,34.0,6.0689,6.0664,0.0039,0.0645,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,40.0,35.0,6.0732,6.0707,0.0042,0.0625,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,41.0,36.0,6.0741,6.0716,0.0043,0.0614,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,42.0,37.0,6.0743,6.0717,0.0044,0.0623,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,43.0,38.0,6.0759,6.0733,0.004,0.0612,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,44.0,39.0,6.072,6.0693,0.0042,0.0613,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,45.0,40.0,6.0737,6.071,0.0044,0.0607,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,46.0,41.0,6.0725,6.0698,0.0043,0.059,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,47.0,42.0,6.0721,6.0693,0.0043,0.0584,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,48.0,43.0,6.0789,6.0761,0.0046,0.0563,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,49.0,44.0,6.0769,6.0741,0.0045,0.0574,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,50.0,45.0,6.0717,6.0688,0.0045,0.0574,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,51.0,46.0,6.0757,6.0728,0.0048,0.0559,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,52.0,47.0,6.0676,6.0647,0.0047,0.0555,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,53.0,48.0,6.0773,6.0743,0.0047,0.0551,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,54.0,49.0,6.0773,6.0744,0.0047,0.0541,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,55.0,50.0,6.0772,6.0742,0.0048,0.0538,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,56.0,51.0,6.073,6.07,0.0048,0.0538,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,57.0,52.0,6.0764,6.0734,0.0049,0.0524,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,58.0,53.0,6.0762,6.0731,0.0045,0.0528,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,59.0,54.0,6.0747,6.0716,0.0045,0.0532,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,60.0,55.0,6.0727,6.0695,0.0047,0.0529,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,61.0,56.0,6.0768,6.0737,0.005,0.0506,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,62.0,57.0,6.0781,6.075,0.0049,0.0498,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,63.0,58.0,6.0765,6.0733,0.0049,0.0511,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,64.0,59.0,6.0735,6.0703,0.0053,0.0495,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,65.0,60.0,6.0729,6.0697,0.0053,0.0493,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,66.0,61.0,6.0762,6.073,0.0053,0.0485,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,67.0,62.0,6.0747,6.0714,0.005,0.0491,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,68.0,63.0,6.0733,6.0699,0.005,0.0497,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,69.0,64.0,6.0783,6.075,0.0054,0.0475,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,70.0,65.0,6.0777,6.0743,0.0054,0.048,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,71.0,66.0,6.0788,6.0755,0.0053,0.0468,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,72.0,67.0,6.0764,6.073,0.0052,0.0472,,
+FiLM,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log,73.0,68.0,6.0759,6.0724,0.0053,0.0472,,
+AdaLN,quick,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/quick_ablation_adaln_only_e5s500.log,0.0,0.0,5.793,5.793,0.0,0.0,0.0,0.0
+AdaLN,quick,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/quick_ablation_adaln_only_e5s500.log,1.0,1.0,4.5318,4.5317,1.0153,0.0,0.0,0.0
+AdaLN,quick,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/quick_ablation_adaln_only_e5s500.log,2.0,2.0,4.2368,4.2367,1.4344,0.0,0.0,0.0
+AdaLN,quick,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/quick_ablation_adaln_only_e5s500.log,3.0,3.0,4.2246,4.2245,1.5172,0.0,0.0,0.0
+AdaLN,quick,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/quick_ablation_adaln_only_e5s500.log,4.0,4.0,4.1462,4.1459,1.6647,0.0,0.0,0.0
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,0.0,0.0,4.2492,4.1588,0.0,0.0,0.0,4.5199
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,1.0,1.0,4.2151,4.1165,0.0,0.0,0.0,4.4832
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,2.0,2.0,4.1911,4.0844,0.0,0.0,0.0,4.4454
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,3.0,3.0,4.2267,4.1102,0.0,0.0,0.0,4.4834
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,4.0,4.0,4.2482,4.1225,0.0,0.0,0.0,4.486
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,5.0,5.0,4.2424,4.108,0.0,0.0,0.0,4.4771
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,6.0,6.0,4.2237,4.0811,0.0,0.0,0.0,4.4541
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,7.0,7.0,4.2432,4.0921,0.0,0.0,0.0,4.4445
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,8.0,8.0,4.2105,4.0512,0.0,0.0,0.0,4.4259
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,9.0,9.0,4.1923,4.0252,0.0,0.0,0.0,4.3985
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,10.0,10.0,4.2089,4.0327,0.0,0.0,0.0,4.4052
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,11.0,11.0,4.2628,4.0767,0.0,0.0,0.0,4.4304
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,12.0,12.0,4.1837,3.9917,0.0,0.0,0.0,4.3628
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,13.0,13.0,4.1992,3.9983,0.0,0.0,0.0,4.3672
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,14.0,14.0,4.27,4.0577,0.0,0.0,0.0,4.4224
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,15.0,15.0,4.2609,4.0406,0.0,0.0,0.0,4.4056
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,16.0,16.0,4.2388,4.02,0.0,0.0,0.0,4.3765
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,17.0,17.0,4.2533,4.0336,0.0,0.0,0.0,4.394
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,18.0,18.0,4.2504,4.0307,0.0,0.0,0.0,4.3939
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,19.0,19.0,4.2468,4.0276,0.0,0.0,0.0,4.3824
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,20.0,20.0,4.2736,4.0534,0.0,0.0,0.0,4.4051
+AdaLN+R,rollout_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log,21.0,21.0,4.1715,3.9559,0.0,0.0,0.0,4.3122
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,0.0,0.0,4.3327,4.3324,0.0,0.0,0.0064,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,1.0,1.0,4.0356,4.0353,1.8818,0.0,0.0025,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,2.0,2.0,4.0078,4.0073,1.9696,0.0,0.0018,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,3.0,3.0,3.9671,3.9665,2.0799,0.0,0.0017,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,4.0,4.0,3.9242,3.9234,2.1799,0.0,0.0015,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,5.0,5.0,3.8735,3.8725,2.3007,0.0,0.0016,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,6.0,6.0,3.8321,3.8308,2.384,0.0,0.0016,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,7.0,7.0,3.7956,3.794,2.4508,0.0,0.0016,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,8.0,8.0,3.7492,3.7474,2.5491,0.0,0.0015,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,9.0,9.0,3.7229,3.7208,2.6113,0.0,0.0015,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,10.0,10.0,3.6732,3.6708,2.7069,0.0,0.0015,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,11.0,11.0,3.6655,3.6629,2.7532,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,12.0,12.0,3.6289,3.6259,2.808,0.0,0.0015,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,13.0,13.0,3.6065,3.6033,2.8306,0.0,0.0015,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,14.0,14.0,3.5952,3.5916,2.8769,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,15.0,15.0,3.5627,3.5589,2.9463,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,16.0,16.0,3.5396,3.5355,2.9899,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,17.0,17.0,3.5303,3.5259,3.0044,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,18.0,18.0,3.513,3.5083,3.0269,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,19.0,19.0,3.5125,3.5075,3.0376,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,20.0,20.0,3.4841,3.4787,3.0778,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,21.0,21.0,3.4733,3.4676,3.1297,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,22.0,22.0,3.4628,3.4568,3.1256,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,23.0,23.0,3.4586,3.4524,3.1227,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,24.0,24.0,3.439,3.4325,3.1505,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,25.0,25.0,3.4269,3.4202,3.1317,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,26.0,26.0,3.4212,3.4141,3.1656,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,27.0,27.0,3.4036,3.3962,3.1957,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,28.0,28.0,3.4005,3.3929,3.191,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,29.0,29.0,3.3862,3.3783,3.1775,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,30.0,30.0,3.3795,3.3713,3.1757,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,31.0,31.0,3.3749,3.3665,3.1753,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,32.0,32.0,3.3453,3.3366,3.1922,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,33.0,33.0,3.3621,3.3533,3.1342,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,34.0,34.0,3.3502,3.341,3.163,0.0,0.0014,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,35.0,35.0,3.3278,3.3184,3.1697,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,36.0,36.0,3.3412,3.3316,3.1284,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,37.0,37.0,3.3127,3.3028,3.1551,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,38.0,38.0,3.3176,3.3074,3.1289,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,39.0,39.0,3.3,3.2895,3.1528,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,40.0,40.0,3.2893,3.2785,3.1557,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,41.0,41.0,3.2847,3.2736,3.1484,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,42.0,42.0,3.2818,3.2707,3.1083,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,43.0,43.0,3.2685,3.2571,3.122,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,44.0,44.0,3.2583,3.2465,3.1361,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,45.0,45.0,3.2577,3.2457,3.1253,0.0,0.0012,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,46.0,46.0,3.2497,3.2374,3.1335,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,47.0,47.0,3.2395,3.2269,3.1598,0.0,0.0012,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,48.0,48.0,3.2326,3.2199,3.1362,0.0,0.0012,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,49.0,49.0,3.2401,3.2271,3.1247,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,50.0,50.0,3.2331,3.2199,3.1095,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,51.0,51.0,3.2345,3.221,3.1174,0.0,0.0013,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,52.0,52.0,3.218,3.2041,3.1377,0.0,0.0012,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,53.0,53.0,3.2125,3.1985,3.1302,0.0,0.0012,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,54.0,54.0,3.207,3.1926,3.1436,0.0,0.0012,
+AdaLN+Aux,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,55.0,55.0,3.1957,3.1811,3.1358,0.0,0.0012,
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,0.0,0.0,5.8263,5.7065,0.0,0.0,0.0114,5.9745
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,1.0,1.0,4.4829,4.378,0.0,0.0,0.0089,4.7519
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,2.0,2.0,4.3923,4.2802,0.0,0.0,0.0058,4.6658
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,3.0,3.0,4.3783,4.2576,0.0,0.0,0.0051,4.6358
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,4.0,4.0,4.2961,4.1686,0.0,0.0,0.0043,4.5456
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,5.0,5.0,4.3291,4.192,0.0,0.0,0.0043,4.564
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,6.0,6.0,4.3079,4.1626,0.0,0.0,0.0042,4.5348
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,7.0,7.0,4.3,4.1456,0.0,0.0,0.004,4.5335
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,8.0,8.0,4.2901,4.1278,0.0,0.0,0.004,4.5015
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,9.0,9.0,4.2418,4.0725,0.0,0.0,0.0038,4.4499
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,10.0,10.0,4.2748,4.0954,0.0,0.0,0.0036,4.4797
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,11.0,11.0,4.2939,4.1057,0.0,0.0,0.0035,4.4755
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,12.0,12.0,4.2784,4.0821,0.0,0.0,0.0029,4.4568
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,13.0,13.0,4.2685,4.064,0.0,0.0,0.0026,4.4424
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,14.0,14.0,4.2311,4.0198,0.0,0.0,0.0022,4.3989
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,15.0,15.0,4.2572,4.0358,0.0,0.0,0.002,4.4259
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,16.0,16.0,4.2988,4.0758,0.0,0.0,0.0022,4.4564
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,17.0,17.0,4.2247,4.0048,0.0,0.0,0.0021,4.3959
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,18.0,18.0,4.1757,3.958,0.0,0.0,0.002,4.3504
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,19.0,19.0,4.2541,4.0333,0.0,0.0,0.0018,4.4136
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,20.0,20.0,4.2265,4.0076,0.0,0.0,0.002,4.3741
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,21.0,21.0,4.2754,4.0548,0.0,0.0,0.0019,4.4084
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,22.0,22.0,4.2629,4.042,0.0,0.0,0.0021,4.4137
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,23.0,23.0,4.2139,3.9951,0.0,0.0,0.0018,4.3713
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,24.0,24.0,4.2129,3.9941,0.0,0.0,0.0019,4.3725
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,25.0,25.0,4.2302,4.0108,0.0,0.0,0.0017,4.3848
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,26.0,26.0,4.248,4.0282,0.0,0.0,0.002,4.3919
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,27.0,27.0,4.2496,4.0301,0.0,0.0,0.0021,4.3847
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,28.0,28.0,4.2226,4.0042,0.0,0.0,0.0018,4.3628
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,29.0,29.0,4.2365,4.017,0.0,0.0,0.0017,4.3872
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,30.0,30.0,4.2101,3.9922,0.0,0.0,0.0018,4.3535
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,31.0,31.0,4.2251,4.0065,0.0,0.0,0.002,4.3662
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,32.0,32.0,4.2256,4.0072,0.0,0.0,0.0018,4.3623
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,33.0,33.0,4.2398,4.0207,0.0,0.0,0.0014,4.3798
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,34.0,34.0,4.1792,3.963,0.0,0.0,0.0016,4.3202
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,35.0,35.0,4.194,3.9772,0.0,0.0,0.0018,4.3316
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,36.0,36.0,4.1736,3.9579,0.0,0.0,0.0015,4.3102
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,37.0,37.0,4.2295,4.011,0.0,0.0,0.0017,4.3664
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,38.0,38.0,4.1203,3.907,0.0,0.0,0.002,4.2608
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,39.0,39.0,4.2319,4.0129,0.0,0.0,0.0017,4.3774
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,40.0,40.0,4.2061,3.9896,0.0,0.0,0.0015,4.3275
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,41.0,41.0,4.1313,3.9173,0.0,0.0,0.0017,4.2761
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,42.0,42.0,4.1904,3.9741,0.0,0.0,0.0019,4.3225
+w/o Mem,scratch,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log,43.0,43.0,4.1843,3.9681,0.0,0.0,0.0016,4.3205
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,0.0,0.0,4.3327,4.3324,0.0,0.0,0.0064,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,1.0,1.0,4.0356,4.0353,1.8818,0.0,0.0025,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,2.0,2.0,4.0078,4.0073,1.9696,0.0,0.0018,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,3.0,3.0,3.9671,3.9665,2.0799,0.0,0.0017,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,4.0,4.0,3.9242,3.9234,2.1799,0.0,0.0015,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,5.0,5.0,3.8735,3.8725,2.3007,0.0,0.0016,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,6.0,6.0,3.8321,3.8308,2.384,0.0,0.0016,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,7.0,7.0,3.7956,3.794,2.4508,0.0,0.0016,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,8.0,8.0,3.7492,3.7474,2.5491,0.0,0.0015,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,9.0,9.0,3.7229,3.7208,2.6113,0.0,0.0015,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,10.0,10.0,3.6732,3.6708,2.7069,0.0,0.0015,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,11.0,11.0,3.6655,3.6629,2.7532,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,12.0,12.0,3.6289,3.6259,2.808,0.0,0.0015,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,13.0,13.0,3.6065,3.6033,2.8306,0.0,0.0015,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,14.0,14.0,3.5952,3.5916,2.8769,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,15.0,15.0,3.5627,3.5589,2.9463,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,16.0,16.0,3.5396,3.5355,2.9899,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,17.0,17.0,3.5303,3.5259,3.0044,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,18.0,18.0,3.513,3.5083,3.0269,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,19.0,19.0,3.5125,3.5075,3.0376,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,20.0,20.0,3.4841,3.4787,3.0778,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,21.0,21.0,3.4733,3.4676,3.1297,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,22.0,22.0,3.4628,3.4568,3.1256,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,23.0,23.0,3.4586,3.4524,3.1227,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,24.0,24.0,3.439,3.4325,3.1505,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,25.0,25.0,3.4269,3.4202,3.1317,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,26.0,26.0,3.4212,3.4141,3.1656,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,27.0,27.0,3.4036,3.3962,3.1957,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,28.0,28.0,3.4005,3.3929,3.191,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,29.0,29.0,3.3862,3.3783,3.1775,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,30.0,30.0,3.3795,3.3713,3.1757,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,31.0,31.0,3.3749,3.3665,3.1753,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,32.0,32.0,3.3453,3.3366,3.1922,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,33.0,33.0,3.3621,3.3533,3.1342,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,34.0,34.0,3.3502,3.341,3.163,0.0,0.0014,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,35.0,35.0,3.3278,3.3184,3.1697,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,36.0,36.0,3.3412,3.3316,3.1284,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,37.0,37.0,3.3127,3.3028,3.1551,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,38.0,38.0,3.3176,3.3074,3.1289,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,39.0,39.0,3.3,3.2895,3.1528,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,40.0,40.0,3.2893,3.2785,3.1557,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,41.0,41.0,3.2847,3.2736,3.1484,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,42.0,42.0,3.2818,3.2707,3.1083,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,43.0,43.0,3.2685,3.2571,3.122,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,44.0,44.0,3.2583,3.2465,3.1361,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,45.0,45.0,3.2577,3.2457,3.1253,0.0,0.0012,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,46.0,46.0,3.2497,3.2374,3.1335,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,47.0,47.0,3.2395,3.2269,3.1598,0.0,0.0012,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,48.0,48.0,3.2326,3.2199,3.1362,0.0,0.0012,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,49.0,49.0,3.2401,3.2271,3.1247,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,50.0,50.0,3.2331,3.2199,3.1095,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,51.0,51.0,3.2345,3.221,3.1174,0.0,0.0013,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,52.0,52.0,3.218,3.2041,3.1377,0.0,0.0012,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,53.0,53.0,3.2125,3.1985,3.1302,0.0,0.0012,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,54.0,54.0,3.207,3.1926,3.1436,0.0,0.0012,
+Final,main,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log,55.0,55.0,3.1957,3.1811,3.1358,0.0,0.0012,
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,56.0,56.0,3.3537,3.1703,0.0,0.0,0.0011,3.6656
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,57.0,57.0,3.3056,3.1255,0.0,0.0,0.0014,3.5996
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,58.0,58.0,3.3121,3.1314,0.0,0.0,0.0012,3.6126
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,59.0,59.0,3.3207,3.14,0.0,0.0,0.001,3.6126
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,60.0,60.0,3.3481,3.166,0.0,0.0,0.0011,3.6404
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,61.0,61.0,3.2568,3.0794,0.0,0.0,0.001,3.5469
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,62.0,62.0,3.2747,3.096,0.0,0.0,0.0013,3.5717
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,63.0,63.0,3.2726,3.0942,0.0,0.0,0.0011,3.5638
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,64.0,64.0,3.2929,3.1143,0.0,0.0,0.0013,3.5687
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,65.0,65.0,3.3331,3.1518,0.0,0.0,0.0014,3.6218
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,66.0,66.0,3.283,3.1042,0.0,0.0,0.0011,3.5734
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,67.0,67.0,3.3285,3.1473,0.0,0.0,0.0013,3.6204
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,68.0,68.0,3.2898,3.1107,0.0,0.0,0.0012,3.5792
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,69.0,69.0,3.2842,3.1063,0.0,0.0,0.001,3.5552
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,70.0,70.0,3.2531,3.0757,0.0,0.0,0.0012,3.544
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,71.0,71.0,3.2743,3.0964,0.0,0.0,0.0013,3.5552
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,72.0,72.0,3.3233,3.1435,0.0,0.0,0.0011,3.5942
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,73.0,73.0,3.2783,3.0998,0.0,0.0,0.0013,3.5668
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,74.0,74.0,3.2857,3.1065,0.0,0.0,0.0011,3.5806
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,75.0,75.0,3.2931,3.115,0.0,0.0,0.0014,3.5582
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,76.0,76.0,3.3016,3.1222,0.0,0.0,0.0013,3.5863
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,77.0,77.0,3.2369,3.0623,0.0,0.0,0.0011,3.4904
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,78.0,78.0,3.2587,3.0817,0.0,0.0,0.0011,3.5389
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,79.0,79.0,3.2716,3.0943,0.0,0.0,0.0013,3.5425
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,80.0,80.0,3.3095,3.1304,0.0,0.0,0.0014,3.5775
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,81.0,81.0,3.2598,3.0824,0.0,0.0,0.0011,3.5439
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,82.0,82.0,3.2436,3.0686,0.0,0.0,0.0012,3.4971
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,83.0,83.0,3.3189,3.1398,0.0,0.0,0.0012,3.5798
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,84.0,84.0,3.2986,3.1198,0.0,0.0,0.0012,3.5746
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,85.0,85.0,3.2347,3.0594,0.0,0.0,0.0011,3.503
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,86.0,86.0,3.2414,3.0657,0.0,0.0,0.0011,3.5103
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,87.0,87.0,3.2871,3.1084,0.0,0.0,0.0013,3.5724
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,88.0,88.0,3.2598,3.0837,0.0,0.0,0.0011,3.5196
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,89.0,89.0,3.2746,3.0971,0.0,0.0,0.0013,3.5468
+Final,rollout_memory_ft,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log,90.0,90.0,3.2815,3.1033,0.0,0.0,0.0013,3.5613

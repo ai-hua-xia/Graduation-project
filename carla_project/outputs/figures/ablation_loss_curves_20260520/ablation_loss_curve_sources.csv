@@ -1,0 +1,7 @@
+model,n_points,relative_epoch_end,start_loss,end_loss,start_ce,end_ce,note,logs
+FiLM,69,68.0,6.0749,6.0759,6.0741,6.0724,FiLM baseline; log begins from saved epoch 5,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8.log
+AdaLN,5,4.0,5.7930,4.1462,5.7930,4.1459,"AdaLN-only quick ablation, 5 epochs x 500 steps",/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/quick_ablation_adaln_only_e5s500.log
+AdaLN+R,22,21.0,4.2492,4.1715,4.1588,3.9559,AdaLN-only checkpoint followed by rollout fine-tune,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_rollout_ft_20260509.log
+AdaLN+Aux,56,55.0,4.3327,3.1957,4.3324,3.1811,AdaLN-Zero with action auxiliary supervision,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log
+w/o Mem,44,43.0,5.8263,4.1843,5.7065,3.9681,"AdaLN+ActionAux+Rollout without memory, trained from scratch",/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_wo_memory_scratch_20260509.log
+Final,91,90.0,4.3327,3.2815,4.3324,3.1033,AdaLN+ActionAux main training plus rollout+memory fine-tune,/home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux.log; /home/llb/HunyuanWorld-Voyager/bishe/carla_project/logs/train_wm/train_world_model_f8_adaln_aux_rollout_ft_b1_20260509.log
