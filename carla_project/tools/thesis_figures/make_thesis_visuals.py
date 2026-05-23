@@ -18,6 +18,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from matplotlib import font_manager
+from matplotlib.patches import Rectangle
 from PIL import Image
 
 
@@ -46,6 +47,14 @@ LONG_CURVE_STARTS = [0, 80 * 200, 80 * 800, START_IDX]
 SEED = 0
 
 FONT_PATH = Path("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf")
+VQVAE_RECON_SEED_PATHS = [
+    RAW_ROOT / "episode_1161/images/0040.png",
+    RAW_ROOT / "episode_0049/images/0040.png",
+    RAW_ROOT / "episode_0242/images/0040.png",
+    RAW_ROOT / "episode_0774/images/0040.png",
+]
+VQVAE_RECON_FRAME_IDS = (12, 28, 40, 56, 72)
+VQVAE_RECON_EPISODE_LIMIT = 180
 
 
 def setup_paths_and_imports() -> None:
@@ -135,6 +144,176 @@ def ssim_uint8(a: np.ndarray, b: np.ndarray) -> float:
         return float("nan")
 
 
+def gray_float(image: np.ndarray) -> np.ndarray:
+    arr = image.astype(np.float32)
+    return 0.299 * arr[..., 0] + 0.587 * arr[..., 1] + 0.114 * arr[..., 2]
+
+
+def laplacian_energy(gray: np.ndarray) -> np.ndarray:
+    return np.abs(cv2.Laplacian(gray, cv2.CV_32F, ksize=3))
+
+
+def select_detail_crop_box(orig: np.ndarray, recon: np.ndarray, crop_size: int = 72, stride: int = 12) -> tuple[int, int, int, int]:
+    if orig.shape != recon.shape:
+        raise ValueError(f"Original and reconstruction shapes differ: {orig.shape} != {recon.shape}")
+    h, w = orig.shape[:2]
+    crop = min(crop_size, h, w)
+    if crop <= 0:
+        raise ValueError("crop_size must be positive")
+
+    orig_gray = gray_float(orig)
+    recon_gray = gray_float(recon)
+    orig_hf = laplacian_energy(orig_gray)
+    recon_hf = laplacian_energy(recon_gray)
+    hf_delta = np.abs(orig_hf - recon_hf)
+    pixel_delta = np.abs(orig_gray - recon_gray)
+
+    best_score = -float("inf")
+    best_box = (0, 0, crop, crop)
+    y_positions = list(range(0, h - crop + 1, stride))
+    x_positions = list(range(0, w - crop + 1, stride))
+    if y_positions[-1] != h - crop:
+        y_positions.append(h - crop)
+    if x_positions[-1] != w - crop:
+        x_positions.append(w - crop)
+
+    for y0 in y_positions:
+        for x0 in x_positions:
+            y1 = y0 + crop
+            x1 = x0 + crop
+            texture = float(orig_hf[y0:y1, x0:x1].mean())
+            detail_change = float(hf_delta[y0:y1, x0:x1].mean())
+            pixel_change = float(pixel_delta[y0:y1, x0:x1].mean())
+            contrast = float(orig_gray[y0:y1, x0:x1].std())
+            score = texture + 1.35 * detail_change + 0.20 * pixel_change + 0.15 * contrast
+            if score > best_score:
+                best_score = score
+                best_box = (x0, y0, x1, y1)
+    return best_box
+
+
+def crop_detail_metrics(orig: np.ndarray, recon: np.ndarray, crop_box: tuple[int, int, int, int]) -> tuple[float, float]:
+    x0, y0, x1, y1 = crop_box
+    orig_hf = laplacian_energy(gray_float(orig))[y0:y1, x0:x1]
+    recon_hf = laplacian_energy(gray_float(recon))[y0:y1, x0:x1]
+    crop_texture = float(orig_hf.mean())
+    detail_loss = max(0.0, float(orig_hf.mean() - recon_hf.mean()))
+    detail_loss += 0.35 * float(np.abs(orig_hf - recon_hf).mean())
+    return crop_texture, detail_loss
+
+
+def rank_vqvae_reconstruction_candidates(
+    candidates: list[dict[str, object]],
+    min_ssim: float = 0.82,
+    min_psnr: float = 24.0,
+) -> list[dict[str, object]]:
+    filtered = [
+        c
+        for c in candidates
+        if float(c["psnr"]) >= min_psnr and not math.isnan(float(c["ssim"])) and float(c["ssim"]) >= min_ssim
+    ]
+    return sorted(
+        filtered,
+        key=lambda c: (
+            float(c["detail_loss"]) * float(c["ssim"])
+            + 0.05 * float(c["crop_texture"])
+            + 0.02 * float(c["psnr"])
+        ),
+        reverse=True,
+    )
+
+
+def vqvae_reconstruction_candidate_paths() -> list[Path]:
+    paths: list[Path] = []
+    seen = set()
+    for path in VQVAE_RECON_SEED_PATHS:
+        if path.exists():
+            paths.append(path)
+            seen.add(path)
+
+    episodes = sorted(p for p in RAW_ROOT.glob("episode_*") if (p / "images").is_dir())
+    if len(episodes) > VQVAE_RECON_EPISODE_LIMIT:
+        episode_indices = np.linspace(0, len(episodes) - 1, VQVAE_RECON_EPISODE_LIMIT, dtype=int)
+        episodes = [episodes[i] for i in episode_indices]
+
+    for episode in episodes:
+        for frame_id in VQVAE_RECON_FRAME_IDS:
+            path = episode / "images" / f"{frame_id:04d}.png"
+            if path.exists() and path not in seen:
+                paths.append(path)
+                seen.add(path)
+    return paths
+
+
+def reconstruct_vqvae_image(vqvae, device: torch.device, path: Path) -> tuple[np.ndarray, np.ndarray]:
+    x = to_tensor_from_image(path, device)
+    with torch.no_grad():
+        recon, _, _, _ = vqvae(x)
+    return tensor_to_uint8(x), tensor_to_uint8(recon)
+
+
+def evaluate_vqvae_reconstruction_candidate(vqvae, device: torch.device, path: Path) -> dict[str, object]:
+    orig, rec = reconstruct_vqvae_image(vqvae, device, path)
+    crop_box = select_detail_crop_box(orig, rec)
+    crop_texture, detail_loss = crop_detail_metrics(orig, rec, crop_box)
+    return {
+        "path": path,
+        "psnr": psnr_uint8(orig, rec),
+        "ssim": ssim_uint8(orig, rec),
+        "crop_box": crop_box,
+        "crop_texture": crop_texture,
+        "detail_loss": detail_loss,
+    }
+
+
+def select_vqvae_reconstruction_samples(vqvae, device: torch.device, sample_count: int = 3) -> list[dict[str, object]]:
+    candidates = [
+        evaluate_vqvae_reconstruction_candidate(vqvae, device, path)
+        for path in vqvae_reconstruction_candidate_paths()
+    ]
+    ranked = rank_vqvae_reconstruction_candidates(candidates)
+    selected = []
+    seen_episodes = set()
+    for candidate in ranked:
+        path = Path(candidate["path"])
+        episode = path.parents[1].name
+        if episode in seen_episodes:
+            continue
+        selected.append(candidate)
+        seen_episodes.add(episode)
+        if len(selected) == sample_count:
+            return selected
+    if len(selected) < sample_count:
+        selected.extend(ranked[len(selected):sample_count])
+    return selected[:sample_count]
+
+
+def vqvae_reconstruction_layout() -> dict[str, object]:
+    img_w = 0.17
+    img_h = img_w * 8.6 / 7.4
+    full_pair_gap = 0.05
+    full_to_detail_gap = full_pair_gap * 1.5
+    title_y = 0.985
+    header_y = 0.925
+    header_to_image_gap = (title_y - header_y) * 1.5
+    first_row_y = header_y - header_to_image_gap - img_h
+    row_step = 0.27
+    col_x = [
+        0.065,
+        0.065 + img_w + full_pair_gap,
+        0.065 + 2 * img_w + full_pair_gap + full_to_detail_gap,
+        0.065 + 3 * img_w + 2 * full_pair_gap + full_to_detail_gap,
+    ]
+    return {
+        "col_x": col_x,
+        "img_w": img_w,
+        "img_h": img_h,
+        "row_y": [first_row_y - row * row_step for row in range(3)],
+        "title_y": title_y,
+        "header_y": header_y,
+    }
+
+
 def load_models(device: torch.device):
     from models.vqvae_v2 import load_vqvae_v2_checkpoint
     from models.world_model import WorldModel
@@ -172,54 +351,79 @@ def load_models(device: torch.device):
 
 
 def make_vqvae_reconstruction_figure(vqvae, device: torch.device) -> None:
-    samples = [
-        ("样本一", RAW_ROOT / "episode_1161/images/0040.png"),
-        ("样本二", RAW_ROOT / "episode_0049/images/0040.png"),
-        ("样本三", RAW_ROOT / "episode_0242/images/0040.png"),
-        ("样本四", RAW_ROOT / "episode_0774/images/0040.png"),
-    ]
-    left_x = 0.13
-    right_x = 0.48
-    img_w = 0.30
-    img_h = img_w * 5.4 / 8.2
-    row_gap = 0.052
-    top_y = 0.715
-    metric_gap = 0.026
-    content_center_x = (left_x + right_x + img_w) / 2
+    samples = select_vqvae_reconstruction_samples(vqvae, device, sample_count=3)
+    sample_labels = ["样本一", "样本二", "样本三"]
+    layout = vqvae_reconstruction_layout()
+    col_x = layout["col_x"]
+    img_w = layout["img_w"]
+    img_h = layout["img_h"]
+    row_y = layout["row_y"]
 
-    fig = plt.figure(figsize=(5.4, 8.2))
-    fig.suptitle("视觉离散表示重建对比", x=content_center_x, fontproperties=CJK_PROP, fontsize=13, y=0.985)
+    fig = plt.figure(figsize=(8.6, 7.4))
+    fig.suptitle("视觉离散表示重建细节对比", fontproperties=CJK_PROP, fontsize=13, y=layout["title_y"])
+    for x, title in zip(col_x, ["原始全图", "重建全图", "原始局部", "重建局部"]):
+        fig.text(x + img_w / 2, layout["header_y"], title, ha="center", fontproperties=CJK_PROP, fontsize=10.5)
 
-    fig.text(left_x + img_w / 2, 0.925, "原始图像", ha="center", fontproperties=CJK_PROP, fontsize=11)
-    fig.text(right_x + img_w / 2, 0.925, "重建结果", ha="center", fontproperties=CJK_PROP, fontsize=11)
+    for row, (sample_label, sample) in enumerate(zip(sample_labels, samples)):
+        path = Path(sample["path"])
+        crop_box = sample["crop_box"]
+        orig, rec = reconstruct_vqvae_image(vqvae, device, path)
+        x0, y0, x1, y1 = crop_box
+        y = row_y[row]
+        p = float(sample["psnr"])
+        s = float(sample["ssim"])
 
-    for row, (sample_label, path) in enumerate(samples):
-        y = top_y - row * (img_h + row_gap)
-        x = to_tensor_from_image(path, device)
-        with torch.no_grad():
-            recon, _, _, _ = vqvae(x)
-        orig = tensor_to_uint8(x)
-        rec = tensor_to_uint8(recon)
-        p = psnr_uint8(orig, rec)
-        s = ssim_uint8(orig, rec)
-
-        fig.text(left_x - 0.025, y + img_h / 2, sample_label, fontproperties=CJK_PROP, fontsize=9, ha="right", va="center")
-        ax_orig = fig.add_axes([left_x, y, img_w, img_h])
-        ax_rec = fig.add_axes([right_x, y, img_w, img_h])
-        ax_orig.imshow(orig)
-        ax_rec.imshow(rec)
-        fig.text(
-            right_x + img_w / 2,
-            y - metric_gap,
-            f"PSNR {p:.2f} / SSIM {s:.3f}" if not math.isnan(s) else f"PSNR {p:.2f}",
-            ha="center",
-            va="center",
-            fontsize=8,
-        )
-        for ax in (ax_orig, ax_rec):
+        fig.text(0.045, y + img_h / 2, sample_label, fontproperties=CJK_PROP, fontsize=9, ha="right", va="center")
+        axes = [
+            fig.add_axes([col_x[0], y, img_w, img_h]),
+            fig.add_axes([col_x[1], y, img_w, img_h]),
+            fig.add_axes([col_x[2], y, img_w, img_h]),
+            fig.add_axes([col_x[3], y, img_w, img_h]),
+        ]
+        axes[0].imshow(orig)
+        axes[1].imshow(rec)
+        axes[2].imshow(orig[y0:y1, x0:x1], interpolation="nearest")
+        axes[3].imshow(rec[y0:y1, x0:x1], interpolation="nearest")
+        for ax in axes[:2]:
+            ax.add_patch(
+                Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="#d62728", linewidth=1.4)
+            )
+        for ax in axes:
             ax.set_xticks([])
             ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_linewidth(1.0)
+        for ax in axes[2:]:
+            for spine in ax.spines.values():
+                spine.set_edgecolor("#d62728")
+                spine.set_linewidth(1.2)
+        metric_text = f"PSNR {p:.2f} / SSIM {s:.3f}" if not math.isnan(s) else f"PSNR {p:.2f}"
+        fig.text(col_x[1] + img_w / 2, y - 0.028, metric_text, ha="center", va="center", fontsize=8)
     save_figure(fig, "fig_vqvae_reconstruction_comparison")
+
+
+def video_frame_count(video_path: Path) -> int:
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Could not open video: {video_path}")
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    if frame_count <= 0:
+        raise RuntimeError(f"Could not determine frame count for video: {video_path}")
+    return frame_count
+
+
+def build_autoregressive_frame_samples(frame_count: int) -> list[tuple[int, str]]:
+    if frame_count < 100:
+        raise ValueError(f"Expected at least 100 frames, got {frame_count}")
+    return [
+        (0, "第零帧"),
+        (20, "第二十帧"),
+        (40, "第四十帧"),
+        (60, "第六十帧"),
+        (80, "第八十帧"),
+        (frame_count - 1, "第一百帧"),
+    ]
 
 
 def read_video_frames(video_path: Path, indices: list[int]) -> list[np.ndarray]:
@@ -238,20 +442,13 @@ def read_video_frames(video_path: Path, indices: list[int]) -> list[np.ndarray]:
 
 
 def make_autoregressive_process_figure() -> None:
-    indices = [0, 10, 20, 40, 60, 75]
-    frame_labels = {
-        0: "第零帧",
-        10: "第十帧",
-        20: "第二十帧",
-        40: "第四十帧",
-        60: "第六十帧",
-        75: "第七十五帧",
-    }
+    samples = build_autoregressive_frame_samples(video_frame_count(FINAL_VIDEO))
+    indices = [idx for idx, _ in samples]
     frames = read_video_frames(FINAL_VIDEO, indices)
     fig, axes = plt.subplots(2, 3, figsize=(9.6, 5.9))
-    for ax, frame, idx in zip(axes.ravel(), frames, indices):
+    for ax, frame, (_, frame_label) in zip(axes.ravel(), frames, samples):
         ax.imshow(frame)
-        ax.set_title(frame_labels[idx], fontproperties=CJK_PROP, fontsize=11)
+        ax.set_title(frame_label, fontproperties=CJK_PROP, fontsize=11)
         ax.set_xticks([])
         ax.set_yticks([])
     fig.suptitle("世界模型自回归生成过程", fontproperties=CJK_PROP, fontsize=13, y=0.98)
